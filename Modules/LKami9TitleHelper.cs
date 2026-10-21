@@ -665,7 +665,8 @@ public sealed class LKami9TitleHelper : ModuleBase
                     var panel = Opaque(tokens.Background);
 
                     ImGui.SetCursorScreenPos(contentPos);
-                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
+                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false,
+                        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
                     FillCurrentWindow(panel, radius);
                     this.DrawContent();
                     ImGui.EndChild();
