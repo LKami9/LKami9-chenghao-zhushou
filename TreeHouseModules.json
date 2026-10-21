@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "Omni 组件版独立窗口：搜索/分类下拉/收藏/分页（OmniPager）/右键菜单（Omni 弹层背景）/成就进度与监视；窗口贴靠 Omni 主体并排在其后，全程不碰全局样式栈。",
-      "Version": "2.0.0",
+      "Description": "Omni 外观版：使用 Omni 字体与主题配色（含滚动条），窗口底色由主题 WindowBg 绘制；RAII 作用域按计数回收，不泄漏；搜索/分类/收藏/分页/右键菜单/成就进度与监视齐备。",
+      "Version": "2.1.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "AB381003A0E638E8B43EFD9C8CDA723EE891E11CF0CC3ECFC3610E50D6B43591"
+      "Sha256": "8BE34EBB7D6EC18BCF54EC4F97D54077BC4A1F4905E6CBAD7BFB2D3CBFA9A868"
     }
   ]
 }
