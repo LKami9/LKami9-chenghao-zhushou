@@ -375,14 +375,15 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         OmniWindowChrome.SetNextWindowPosition(WindowId);
 
-        var pushedColors = 0;
         var pushedVars = 0;
-        PushOmniWindowStyle(ref pushedColors, ref pushedVars);
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
-        pushedVars++;
 
+        // 彻底不用全局颜色栈（PushStyleColor）—— 只用一次性、立即配对的 PushStyleVar，
+        // 从根上避免 PushStyleColor/PopStyleColor 不匹配污染整个 Dalamud UI。
         try
         {
+            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
+            pushedVars++;
+
             if (ImGui.Begin(WindowId, ref open,
                     ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse |
                     ImGuiWindowFlags.NoDocking  | ImGuiWindowFlags.NoScrollbar))
@@ -425,9 +426,11 @@ public sealed class LKami9TitleHelper : ModuleBase
                     var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
                     if (contentSize.X > 1f && contentSize.Y > 1f)
                     {
-                        // 玻璃/半透明主题下内容区会透出游戏画面，这里先铺一层不透明底
+                        // 玻璃/半透明主题下内容区会透出游戏画面，这里先铺一层不透明底。
+                        // 用 Background 与 Surface 混合：浅色主题仍是浅底，深色主题也不会纯黑。
                         var t     = OmniTheme.Tokens;
-                        var solid = new System.Numerics.Vector4(t.Background.X, t.Background.Y, t.Background.Z, 1f);
+                        var panel = System.Numerics.Vector4.Lerp(t.Background, t.Surface, 0.55f) with { W = 1f };
+                        var solid = panel;
                         var draw  = ImGui.GetWindowDrawList();
                         draw.AddRectFilled(contentPos, contentPos + contentSize,
                             ImGui.GetColorU32(solid), OmniTheme.Scale(t.BorderRadius));
@@ -445,7 +448,6 @@ public sealed class LKami9TitleHelper : ModuleBase
         finally
         {
             if (pushedVars > 0) ImGui.PopStyleVar(pushedVars);
-            if (pushedColors > 0) ImGui.PopStyleColor(pushedColors);
         }
 
         if (!open) this.config.WindowOpen = false;
@@ -643,55 +645,6 @@ public sealed class LKami9TitleHelper : ModuleBase
         return fg;
     }
 
-    private static void PushOmniWindowStyle(ref int colors, ref int vars)
-    {
-        var tokens         = OmniTheme.Tokens;
-        var textDisabled   = tokens.Text with { W = tokens.Text.W * 0.55f };
-        var titleBackground = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Primary, 0.35f);
-        var titleActive     = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Accent,  0.65f);
-
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, tokens.Background with { W = 1f }); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, new System.Numerics.Vector4(tokens.Background.X, tokens.Background.Y, tokens.Background.Z, 1f)); colors++;
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, tokens.Background with { W = 1f }); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Text, tokens.Text); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TextDisabled, textDisabled); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Button, tokens.Surface); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, OmniTheme.ActiveBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Header, tokens.Surface); colors++;
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, tokens.Accent); colors++;
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, tokens.Surface); colors++;
-        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, OmniTheme.ActiveBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Tab, tokens.Surface); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TabHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TabActive, tokens.Accent); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, titleBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, titleActive); colors++;
-        ImGui.PushStyleColor(ImGuiCol.TitleBgCollapsed, titleBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, tokens.Background); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, tokens.Secondary); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, tokens.Accent); colors++;
-        ImGui.PushStyleColor(ImGuiCol.CheckMark, tokens.Success); colors++;
-        ImGui.PushStyleColor(ImGuiCol.SliderGrab, tokens.Secondary); colors++;
-        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, tokens.Accent); colors++;
-        ImGui.PushStyleColor(ImGuiCol.Separator, tokens.Border); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ResizeGrip, tokens.Surface); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ResizeGripHovered, OmniTheme.HoverBackground); colors++;
-        ImGui.PushStyleColor(ImGuiCol.ResizeGripActive, tokens.Accent); colors++;
-
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, OmniTheme.PopupPadding()); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, OmniTheme.Scale(tokens.BorderRadius)); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, OmniTheme.BorderThickness()); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(tokens.BorderRadius)); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f))); vars++;
-    }
 
 
     #endregion
