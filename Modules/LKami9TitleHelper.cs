@@ -16,6 +16,7 @@ using OmniToolbox.Common.Module.Enums;
 using OmniToolbox.Common.Module.Models;
 using OmniToolbox.Host;
 using OmniToolbox.UI;
+using OmniToolbox.UI.Controls;
 using OmniToolbox.UI.Theme;
 
 namespace LKami9.TitleHelper;
@@ -91,6 +92,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     private bool                 collapsed;
     private bool                 resizePending;
     private System.Numerics.Vector2 expandedSize = new(820f, 560f);
+    private System.Numerics.Vector2 lastPos;
 
     #region 生命周期
 
@@ -113,6 +115,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.config.WindowOpen = false;
         this.config.Ascending  = true;
         this.config.ScanOnOpen = true;
+        this.config.DockToOmni = true;
         this.collapsed         = false;
         this.resizePending     = true;
         return true;
@@ -350,6 +353,89 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     #region 窗口
 
+    /// <summary>扫当前 ImGui 上下文，取名字含 Omni、本帧活跃、面积最大的根窗口。</summary>
+    private static unsafe ImGuiWindowPtr FindOmniMainWindow()
+    {
+        var ctx = ImGui.GetCurrentContext();
+        if (ctx.Handle == null) return ImGuiWindowPtr.Null;
+
+        var list  = ctx.Handle->Windows;
+        var frame = ctx.Handle->FrameCount;
+        var best  = ImGuiWindowPtr.Null;
+
+        for (var i = 0; i < list.Size; i++)
+        {
+            var w = list[i];
+            if (w.IsNull) continue;
+            if (w.Handle->Hidden != 0 || w.Handle->IsFallbackWindow != 0) continue;
+            if (w.Handle->ParentWindow != null) continue;
+            if (w.Handle->LastFrameActive != frame) continue;
+
+            var name = System.Runtime.InteropServices.Marshal.PtrToStringUTF8((nint)w.Handle->Name) ?? string.Empty;
+            if (!name.Contains("Omni", StringComparison.OrdinalIgnoreCase)) continue;
+
+            if (best.IsNull ||
+                w.Handle->Size.X * w.Handle->Size.Y > best.Handle->Size.X * best.Handle->Size.Y)
+                best = w;
+        }
+
+        return best;
+    }
+
+    private unsafe System.Numerics.Vector2 ComputeDockedPosition(
+        ImGuiWindowPtr omni, System.Numerics.Vector2 mySize)
+    {
+        var vp       = ImGui.GetMainViewport();
+        var gap      = OmniTheme.Scale(12f);
+        var fallback = OmniTheme.ClampWindowPosition(
+            vp.WorkPos + vp.WorkSize - mySize - new System.Numerics.Vector2(gap, gap), mySize);
+
+        if (omni.IsNull) return fallback;
+
+        var oPos = omni.Handle->Pos;
+        var oSz  = omni.Handle->Size;
+        var candidates = new[]
+        {
+            new System.Numerics.Vector2(oPos.X + oSz.X + gap, oPos.Y),
+            new System.Numerics.Vector2(oPos.X - mySize.X - gap, oPos.Y),
+            new System.Numerics.Vector2(oPos.X, oPos.Y + oSz.Y + gap),
+        };
+
+        foreach (var cand in candidates)
+        {
+            var clamped = OmniTheme.ClampWindowPosition(cand, mySize);
+            if (MathF.Abs(clamped.X - cand.X) < 1f &&
+                MathF.Abs(clamped.Y - cand.Y) < 1f &&
+                !Overlaps(clamped, mySize, oPos, oSz))
+                return clamped;
+        }
+
+        return fallback;
+    }
+
+    private static bool Overlaps(
+        System.Numerics.Vector2 aPos, System.Numerics.Vector2 aSize,
+        System.Numerics.Vector2 bPos, System.Numerics.Vector2 bSize) =>
+        aPos.X < bPos.X + bSize.X && aPos.X + aSize.X > bPos.X &&
+        aPos.Y < bPos.Y + bSize.Y && aPos.Y + aSize.Y > bPos.Y;
+
+    private static void DrawThemedRule(System.Numerics.Vector4 color)
+    {
+        var pos   = ImGui.GetCursorScreenPos();
+        var width = MathF.Max(1f, ImGui.GetContentRegionAvail().X);
+        var y     = pos.Y + OmniTheme.Scale(1f);
+        ImGui.GetWindowDrawList().AddLine(pos with { Y = y }, new System.Numerics.Vector2(pos.X + width, y),
+            ImGui.GetColorU32(color));
+        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(6f)));
+    }
+
+    private static void WrappedTextColored(System.Numerics.Vector4 color, string text)
+    {
+        ImGui.PushTextWrapPos();
+        ImGui.TextColored(color, text);
+        ImGui.PopTextWrapPos();
+    }
+
     private unsafe void DrawWindow()
     {
         if (!this.config.WindowOpen) return;
@@ -373,80 +459,89 @@ public sealed class LKami9TitleHelper : ModuleBase
             ImGui.SetNextWindowSize(OmniTheme.ClampWindowSize(this.expandedSize), ImGuiCond.FirstUseEver);
         }
 
-        OmniWindowChrome.SetNextWindowPosition(WindowId);
+        var omni = FindOmniMainWindow();
+        var pos = this.config.DockToOmni
+            ? this.ComputeDockedPosition(omni, targetSize)
+            : OmniTheme.ClampWindowPosition(
+                this.lastPos == System.Numerics.Vector2.Zero
+                    ? viewport.WorkPos + viewport.WorkSize - targetSize
+                    : this.lastPos,
+                targetSize);
 
+        OmniWindowChrome.SetNextWindowPosition(WindowId, pos);
+        ImGui.SetNextWindowPos(pos, this.config.DockToOmni ? ImGuiCond.Always : ImGuiCond.FirstUseEver);
+        this.lastPos = pos;
 
-        // 用 Dalamud 的 ImRaii（RAII）推主题样式：Dispose 时必定弹回，
-        // 即使中途抛异常也不会出现 PushStyleColor/PopStyleColor 不匹配。
-        using var themeScope = new OmniThemeScope();
-        themeScope.PushAll();
-
-        try
+        var self = ImGuiWindowPtr.Null;
+        if (ImGui.Begin(WindowId, ref open,
+                ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse |
+                ImGuiWindowFlags.NoDocking  | ImGuiWindowFlags.NoScrollbar |
+                ImGuiWindowFlags.NoBackground | ImGuiWindowFlags.NoBringToFrontOnFocus))
         {
-            if (ImGui.Begin(WindowId, ref open,
-                    ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse |
-                    ImGuiWindowFlags.NoDocking  | ImGuiWindowFlags.NoScrollbar))
+            self = ImGuiP.GetCurrentWindow();
+
+            var framePos  = ImGui.GetWindowPos();
+            var frameSize = ImGui.GetWindowSize();
+            var tokens    = OmniTheme.Tokens;
+            var radius    = OmniTheme.Scale(tokens.BorderRadius);
+            var draw      = ImGui.GetWindowDrawList();
+
+            draw.AddRectFilled(framePos, framePos + frameSize,
+                ImGui.GetColorU32(tokens.Background with { W = 1f }), radius);
+
+            var chrome = OmniWindowChrome.Draw(
+                framePos, frameSize, this.collapsed,
+                "LKami9 称号助手", CollapseId, CloseId, true);
+
+            if (chrome.CloseClicked)
             {
-                var framePos  = ImGui.GetWindowPos();
-                var frameSize = ImGui.GetWindowSize();
-
-                var chrome = OmniWindowChrome.Draw(
-                    framePos, frameSize, this.collapsed,
-                    "LKami9 称号助手", CollapseId, CloseId, true);
-
-                if (chrome.CloseClicked)
-                {
-                    this.config.WindowOpen = false;
-                    this.collapsed         = false;
-                    this.resizePending     = true;
-                }
-
-                if (chrome.ToggleCollapse)
-                {
-                    if (this.collapsed)
-                    {
-                        this.collapsed     = false;
-                        this.resizePending = true;
-                    }
-                    else
-                    {
-                        this.expandedSize  = frameSize;
-                        this.collapsed     = true;
-                        this.resizePending = true;
-                    }
-                }
-                else if (!this.collapsed)
-                {
-                    this.expandedSize = frameSize;
-                }
-
-                if (!this.collapsed)
-                {
-                    var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
-                    if (contentSize.X > 1f && contentSize.Y > 1f)
-                    {
-                        // 玻璃/半透明主题下内容区会透出游戏画面，这里先铺一层不透明底。
-                        // 用 Background 与 Surface 混合：浅色主题仍是浅底，深色主题也不会纯黑。
-                        var t     = OmniTheme.Tokens;
-                        var panel = System.Numerics.Vector4.Lerp(t.Background, t.Surface, 0.55f) with { W = 1f };
-                        var solid = panel;
-                        var draw  = ImGui.GetWindowDrawList();
-                        draw.AddRectFilled(contentPos, contentPos + contentSize,
-                            ImGui.GetColorU32(solid), OmniTheme.Scale(t.BorderRadius));
-
-                        ImGui.SetCursorScreenPos(contentPos);
-                        ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
-                        this.DrawContent();
-                        ImGui.EndChild();
-                    }
-                }
+                this.config.WindowOpen = false;
+                this.collapsed         = false;
+                this.resizePending     = true;
             }
 
-            ImGui.End();
+            if (chrome.ToggleCollapse)
+            {
+                if (this.collapsed)
+                {
+                    this.collapsed     = false;
+                    this.resizePending = true;
+                }
+                else
+                {
+                    this.expandedSize  = frameSize;
+                    this.collapsed     = true;
+                    this.resizePending = true;
+                }
+            }
+            else if (!this.collapsed)
+            {
+                this.expandedSize = frameSize;
+            }
+
+            if (!this.collapsed)
+            {
+                var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
+                if (contentSize.X > 1f && contentSize.Y > 1f)
+                {
+                    var panel = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Surface, 0.55f) with { W = 1f };
+                    draw.AddRectFilled(contentPos, contentPos + contentSize,
+                        ImGui.GetColorU32(panel), radius);
+
+                    ImGui.SetCursorScreenPos(contentPos);
+                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
+                    this.DrawContent();
+                    ImGui.EndChild();
+                }
+            }
         }
-        finally
+
+        ImGui.End();
+
+        if (!self.IsNull)
         {
-            // 样式由 temaScope(ImRaii) 负责回收
+            if (!omni.IsNull) ImGuiP.BringWindowToDisplayBehind(self, omni);
+            else              ImGuiP.BringWindowToDisplayBack(self);
         }
 
         if (!open) this.config.WindowOpen = false;
@@ -469,38 +564,38 @@ public sealed class LKami9TitleHelper : ModuleBase
         ImGui.Indent(pad);
 
         // ── 工具条 ──
-        ImGui.SetNextItemWidth(OmniTheme.Scale(260f));
         var s = this.search;
-        if (ImGui.InputTextWithHint("###titlesearch", "搜索称号 / 成就 / 分类 / ID", ref s, 120))
+        if (OmniControls.InputTextWithHint("###titlesearch", "搜索称号 / 成就 / 分类 / ID",
+                ref s, 120, OmniTheme.Scale(260f)))
         {
             this.search = s;
             this.Rebuild();
         }
 
         ImGui.SameLine();
-        if (ImGui.Button("刷新")) { this.Build(); }
+        if (OmniControls.SmallButton("刷新", false)) { this.Build(); }
 
         ImGui.SameLine();
         ImGui.BeginDisabled(this.search.Length == 0);
-        if (ImGui.Button("清空")) { this.search = string.Empty; this.Rebuild(); }
+        if (OmniControls.SmallButton("清空", false)) { this.search = string.Empty; this.Rebuild(); }
         ImGui.EndDisabled();
 
         // ── 过滤 ──
         ImGui.Spacing();
         var uo = this.unlockedOnly;
-        if (ImGui.Checkbox("仅已解锁", ref uo)) { this.unlockedOnly = uo; if (uo) this.lockedOnly = false; this.Rebuild(); }
+        if (OmniControls.Checkbox("仅已解锁", ref uo)) { this.unlockedOnly = uo; if (uo) this.lockedOnly = false; this.Rebuild(); }
         ImGui.SameLine();
         var lo = this.lockedOnly;
-        if (ImGui.Checkbox("仅未解锁", ref lo)) { this.lockedOnly = lo; if (lo) this.unlockedOnly = false; this.Rebuild(); }
+        if (OmniControls.Checkbox("仅未解锁", ref lo)) { this.lockedOnly = lo; if (lo) this.unlockedOnly = false; this.Rebuild(); }
         ImGui.SameLine();
         var po = this.prefixOnly;
-        if (ImGui.Checkbox("仅前缀", ref po)) { this.prefixOnly = po; if (po) this.suffixOnly = false; this.Rebuild(); }
+        if (OmniControls.Checkbox("仅前缀", ref po)) { this.prefixOnly = po; if (po) this.suffixOnly = false; this.Rebuild(); }
         ImGui.SameLine();
         var so = this.suffixOnly;
-        if (ImGui.Checkbox("仅后缀", ref so)) { this.suffixOnly = so; if (so) this.prefixOnly = false; this.Rebuild(); }
+        if (OmniControls.Checkbox("仅后缀", ref so)) { this.suffixOnly = so; if (so) this.prefixOnly = false; this.Rebuild(); }
         ImGui.SameLine();
         var asc = this.config.Ascending;
-        if (ImGui.Checkbox("正序", ref asc)) { this.config.Ascending = asc; this.Rebuild(); }
+        if (OmniControls.Checkbox("正序", ref asc)) { this.config.Ascending = asc; this.Rebuild(); }
 
         // ── 摘要 ──
         ImGui.Spacing();
@@ -512,7 +607,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             ImGui.TextColored(cOk, "· 上次佩戴：" + this.lastEquipped);
         }
 
-        ImGui.Separator();
+        DrawThemedRule(tokens.Border);
 
         // ── 列表 ──
         var listHeight = ImGui.GetContentRegionAvail().Y - OmniTheme.Scale(26f);
@@ -536,12 +631,12 @@ public sealed class LKami9TitleHelper : ModuleBase
 
             ImGui.TextColored(ok ? cText : cDim, e.Name);
             ImGui.SameLine();
-            ImGui.TextDisabled($"({kind} · {e.Id})");
+            ImGui.TextColored(cDim, $"({kind} · {e.Id})");
 
             if (ok)
             {
                 ImGui.SameLine();
-                if (ImGui.SmallButton("佩戴")) this.Equip(e.Id);
+                if (OmniControls.SmallButton("佩戴", false)) this.Equip(e.Id);
             }
 
             if (e.AchName.Length > 0 || e.AchDesc.Length > 0)
@@ -555,26 +650,24 @@ public sealed class LKami9TitleHelper : ModuleBase
 
                 if (e.AchDesc.Length > 0)
                 {
-                    ImGui.PushStyleColor(ImGuiCol.Text, cDim);
-                    ImGui.TextWrapped(e.AchDesc);
-                    ImGui.PopStyleColor();
+                    WrappedTextColored(cDim, e.AchDesc);
                 }
                 ImGui.Unindent(OmniTheme.Scale(14f));
             }
             else if (!ok)
             {
                 ImGui.Indent(OmniTheme.Scale(14f));
-                ImGui.TextDisabled("（数据表里没有关联成就，可能是特殊来源）");
+                ImGui.TextColored(cDim, "（数据表里没有关联成就，可能是特殊来源）");
                 ImGui.Unindent(OmniTheme.Scale(14f));
             }
 
-            ImGui.Separator();
+            DrawThemedRule(tokens.Border);
             ImGui.PopID();
         }
 
         if (this.view.Count > this.displayLimit)
         {
-            if (ImGui.Button($"显示更多（还有 {this.view.Count - this.displayLimit} 条）"))
+            if (OmniControls.SmallButton($"显示更多（还有 {this.view.Count - this.displayLimit} 条）", false))
                 this.displayLimit += 300;
         }
         else if (this.displayLimit > 300 && this.view.Count <= this.displayLimit)
@@ -584,7 +677,7 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         ImGui.EndChild();
 
-        ImGui.TextDisabled(this.status);
+        ImGui.TextColored(cDim, this.status);
         ImGui.Unindent(pad);
     }
 
@@ -593,111 +686,31 @@ public sealed class LKami9TitleHelper : ModuleBase
     #region 设置页（极简）
 
 
-    /// <summary>Omni 主题的 RAII 作用域：Push 自己计数，Dispose 按计数弹回，绝不跨窗口泄漏。</summary>
-    private sealed class OmniThemeScope : IDisposable
-    {
-        private int colors;
-        private int vars;
-
-        public void Color(ImGuiCol idx, System.Numerics.Vector4 color)
-        {
-            ImGui.PushStyleColor(idx, color);
-            this.colors++;
-        }
-
-        public void Var(ImGuiStyleVar var, System.Numerics.Vector2 value)
-        {
-            ImGui.PushStyleVar(var, value);
-            this.vars++;
-        }
-
-        public void Var(ImGuiStyleVar var, float value)
-        {
-            ImGui.PushStyleVar(var, value);
-            this.vars++;
-        }
-
-        public void PushAll()
-        {
-            var t = OmniTheme.Tokens;
-
-            var textDisabled    = t.Text with { W = t.Text.W * 0.55f };
-            var titleBackground = System.Numerics.Vector4.Lerp(t.Background, t.Primary, 0.35f);
-            var titleActive     = System.Numerics.Vector4.Lerp(t.Background, t.Accent,  0.65f);
-
-            this.Color(ImGuiCol.WindowBg, t.Background with { W = 1f });
-            this.Color(ImGuiCol.ChildBg, System.Numerics.Vector4.Zero);
-            this.Color(ImGuiCol.PopupBg, t.Background with { W = 1f });
-            this.Color(ImGuiCol.Border, t.Border);
-            this.Color(ImGuiCol.Text, t.Text);
-            this.Color(ImGuiCol.TextDisabled, textDisabled);
-            this.Color(ImGuiCol.Button, t.Surface);
-            this.Color(ImGuiCol.ButtonHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.ButtonActive, OmniTheme.ActiveBackground);
-            this.Color(ImGuiCol.Header, t.Surface);
-            this.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.HeaderActive, t.Accent);
-            this.Color(ImGuiCol.FrameBg, t.Surface);
-            this.Color(ImGuiCol.FrameBgHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.FrameBgActive, OmniTheme.ActiveBackground);
-            this.Color(ImGuiCol.Tab, t.Surface);
-            this.Color(ImGuiCol.TabHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.TabActive, t.Accent);
-            this.Color(ImGuiCol.TitleBg, titleBackground);
-            this.Color(ImGuiCol.TitleBgActive, titleActive);
-            this.Color(ImGuiCol.TitleBgCollapsed, titleBackground);
-            this.Color(ImGuiCol.ScrollbarBg, t.Background);
-            this.Color(ImGuiCol.ScrollbarGrab, t.Secondary);
-            this.Color(ImGuiCol.ScrollbarGrabHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.ScrollbarGrabActive, t.Accent);
-            this.Color(ImGuiCol.CheckMark, t.Success);
-            this.Color(ImGuiCol.SliderGrab, t.Secondary);
-            this.Color(ImGuiCol.SliderGrabActive, t.Accent);
-            this.Color(ImGuiCol.Separator, t.Border);
-            this.Color(ImGuiCol.ResizeGrip, t.Surface);
-            this.Color(ImGuiCol.ResizeGripHovered, OmniTheme.HoverBackground);
-            this.Color(ImGuiCol.ResizeGripActive, t.Accent);
-
-            this.Var(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
-            this.Var(ImGuiStyleVar.WindowRounding, OmniTheme.Scale(t.BorderRadius));
-            this.Var(ImGuiStyleVar.WindowBorderSize, OmniTheme.BorderThickness());
-            this.Var(ImGuiStyleVar.FrameRounding, OmniTheme.Scale(t.ButtonRadius));
-            this.Var(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(t.BorderRadius));
-            this.Var(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(t.ButtonRadius));
-            this.Var(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(t.ButtonRadius));
-            this.Var(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f)));
-        }
-
-        public void Dispose()
-        {
-            if (this.vars   > 0) ImGui.PopStyleVar(this.vars);
-            if (this.colors > 0) ImGui.PopStyleColor(this.colors);
-            this.vars   = 0;
-            this.colors = 0;
-        }
-    }
-
     public override bool DrawSettings()
     {
         var tokens = OmniTheme.Tokens;
         var back   = Opaque(tokens.Background);
 
         ImGui.TextColored(Readable(tokens.Accent, back), "LKami9 称号助手");
-        ImGui.TextWrapped("主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
+        WrappedTextColored(Readable(tokens.Secondary, back),
+            "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
         ImGui.Spacing();
-        if (ImGui.Button(this.config.WindowOpen ? "关闭窗口" : "打开窗口"))
+        if (OmniControls.SmallButton(this.config.WindowOpen ? "关闭窗口" : "打开窗口", false))
             this.ToggleWindow(!this.config.WindowOpen);
 
         ImGui.SameLine();
-        if (ImGui.Button("重新扫描")) this.Build();
+        if (OmniControls.SmallButton("重新扫描", false)) this.Build();
 
         ImGui.Spacing();
         var scan = this.config.ScanOnOpen;
-        if (ImGui.Checkbox("启用时自动扫描称号", ref scan)) this.config.ScanOnOpen = scan;
+        if (OmniControls.Checkbox("启用时自动扫描称号", ref scan)) this.config.ScanOnOpen = scan;
+
+        var dock = this.config.DockToOmni;
+        if (OmniControls.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) this.config.DockToOmni = dock;
 
         ImGui.Spacing();
-        ImGui.TextDisabled(this.status);
+        ImGui.TextColored(Readable(tokens.Secondary, back), this.status);
         return true;
     }
 
@@ -739,4 +752,5 @@ public sealed class LKami9TitleHelperConfig
     public bool WindowOpen { get; set; }
     public bool Ascending  { get; set; } = true;
     public bool ScanOnOpen { get; set; } = true;
+    public bool DockToOmni { get; set; } = true;
 }
