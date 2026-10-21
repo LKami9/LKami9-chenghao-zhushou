@@ -568,8 +568,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
         else
         {
-            // 自由模式：位置交给 ImGui / Omni 的记忆，不每帧强制，才能拖动
-            OmniWindowChrome.SetNextWindowPosition(WindowId);
+            // 自由模式：位置完全交给 ImGui 自己管理（按窗口名持久化），不每帧强制 → 可拖动
             ImGui.SetNextWindowPos(
                 OmniTheme.ClampWindowPosition(
                     viewport.WorkPos + viewport.WorkSize - targetSize,
@@ -643,8 +642,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                     var panel = Opaque(tokens.Background);
 
                     ImGui.SetCursorScreenPos(contentPos);
-                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false,
-                        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
                     FillCurrentWindow(panel, radius);
                     this.DrawContent();
                     ImGui.EndChild();
