@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "增强 TitleList 首次接收检测：同一次刷新内强制扫描，增加启用与构建日志，继续提供 0 解锁回退和状态同步。",
-      "Version": "2.12.3",
+      "Description": "恢复 v2.11.1 的启用即扫描时机，修复 2.12 初始化时序回归；保留 TitleList 首次接收强制刷新、0 解锁回退与诊断日志。",
+      "Version": "2.12.4",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "599185D877D1E3C4DF28FC3A832436ABB4857FC7BD17B53B1F6820542862D83F"
+      "Sha256": "B673ED46CF726E6AC88A02E47E034C5274A2F7CE46537424575039775A61AD83"
     }
   ]
 }

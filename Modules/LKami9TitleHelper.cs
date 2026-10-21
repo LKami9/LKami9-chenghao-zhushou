@@ -126,9 +126,11 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.RefreshFavoriteCache();
         this.RegisterShortCommand();
         DalamudServices.PluginLog.Information(
-            $"[LKami9TitleHelper] enabled 2.12.3: windowOpen={this.config.WindowOpen}, shortCommand={this.shortCommandRegistered}");
+            $"[LKami9TitleHelper] enabled 2.12.4: windowOpen={this.config.WindowOpen}, shortCommand={this.shortCommandRegistered}");
 
-        if (this.config.WindowOpen) this.EnsureDataReady();
+        // 与 v2.11.1 的已知正常时机保持一致：模块启用即建立称号数据，
+        // 不等待窗口首次打开，避免 TitleList 请求时序变化导致解锁位图为空。
+        this.EnsureDataReady();
     }
 
     protected override void OnDisable()
