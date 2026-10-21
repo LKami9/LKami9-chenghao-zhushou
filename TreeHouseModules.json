@@ -6,10 +6,10 @@
       "Name": "LKami9称号助手",
       "Author": "LKami9",
       "Description": "Omni 外观版：使用 Omni 字体与主题配色（含滚动条），窗口底色由主题 WindowBg 绘制；RAII 作用域按计数回收，不泄漏；搜索/分类/收藏/分页/右键菜单/成就进度与监视齐备。",
-      "Version": "2.1.0",
+      "Version": "2.1.1",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "8BE34EBB7D6EC18BCF54EC4F97D54077BC4A1F4905E6CBAD7BFB2D3CBFA9A868"
+      "Sha256": "EADBBD194EA1F8182134A1167FD35E17A0B40CDEFAB1A3DA90DA63CF69CDA41E"
     }
   ]
 }

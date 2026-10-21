@@ -747,10 +747,10 @@ public sealed class LKami9TitleHelper : ModuleBase
         var pad     = OmniTheme.Scale(12f);
         var back    = Opaque(tokens.Background);
         var panel   = Opaque(tokens.Background);
-        var cText   = Readable(tokens.Text, back);
-        var cDim    = Readable(tokens.Secondary, back);
-        var cAccent = Readable(tokens.Accent, back);
-        var cOk     = Readable(tokens.Success, back);
+        var cText   = Opaque(tokens.Text);
+        var cDim    = Opaque(tokens.Secondary);
+        var cAccent = Opaque(tokens.Accent);
+        var cOk     = Opaque(tokens.Success);
 
         ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(6f)));
         ImGui.Indent(pad);
@@ -976,8 +976,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         var tokens = OmniTheme.Tokens;
         var back   = Opaque(tokens.Background);
 
-        ImGui.TextColored(Readable(tokens.Accent, back), "LKami9 称号助手");
-        WrappedTextColored(Readable(tokens.Secondary, back),
+        ImGui.TextColored(Opaque(tokens.Accent), "LKami9 称号助手");
+        WrappedTextColored(Opaque(tokens.Secondary),
             "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
         var changed = false;
@@ -1009,7 +1009,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.Spacing();
-        ImGui.TextColored(Readable(tokens.Secondary, back), this.status);
+        ImGui.TextColored(Opaque(tokens.Secondary), this.status);
 
         // 按官方规范：只有配置真的变了才返回 true，让宿主保存
         return changed;
