@@ -375,15 +375,14 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         OmniWindowChrome.SetNextWindowPosition(WindowId);
 
-        var pushedVars = 0;
 
-        // 彻底不用全局颜色栈（PushStyleColor）—— 只用一次性、立即配对的 PushStyleVar，
-        // 从根上避免 PushStyleColor/PopStyleColor 不匹配污染整个 Dalamud UI。
+        // 用 Dalamud 的 ImRaii（RAII）推主题样式：Dispose 时必定弹回，
+        // 即使中途抛异常也不会出现 PushStyleColor/PopStyleColor 不匹配。
+        using var themeScope = new OmniThemeScope();
+        themeScope.PushAll();
+
         try
         {
-            ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
-            pushedVars++;
-
             if (ImGui.Begin(WindowId, ref open,
                     ImGuiWindowFlags.NoTitleBar | ImGuiWindowFlags.NoCollapse |
                     ImGuiWindowFlags.NoDocking  | ImGuiWindowFlags.NoScrollbar))
@@ -447,7 +446,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
         finally
         {
-            if (pushedVars > 0) ImGui.PopStyleVar(pushedVars);
+            // 样式由 temaScope(ImRaii) 负责回收
         }
 
         if (!open) this.config.WindowOpen = false;
@@ -592,6 +591,91 @@ public sealed class LKami9TitleHelper : ModuleBase
     #endregion
 
     #region 设置页（极简）
+
+
+    /// <summary>Omni 主题的 RAII 作用域：Push 自己计数，Dispose 按计数弹回，绝不跨窗口泄漏。</summary>
+    private sealed class OmniThemeScope : IDisposable
+    {
+        private int colors;
+        private int vars;
+
+        public void Color(ImGuiCol idx, System.Numerics.Vector4 color)
+        {
+            ImGui.PushStyleColor(idx, color);
+            this.colors++;
+        }
+
+        public void Var(ImGuiStyleVar var, System.Numerics.Vector2 value)
+        {
+            ImGui.PushStyleVar(var, value);
+            this.vars++;
+        }
+
+        public void Var(ImGuiStyleVar var, float value)
+        {
+            ImGui.PushStyleVar(var, value);
+            this.vars++;
+        }
+
+        public void PushAll()
+        {
+            var t = OmniTheme.Tokens;
+
+            var textDisabled    = t.Text with { W = t.Text.W * 0.55f };
+            var titleBackground = System.Numerics.Vector4.Lerp(t.Background, t.Primary, 0.35f);
+            var titleActive     = System.Numerics.Vector4.Lerp(t.Background, t.Accent,  0.65f);
+
+            this.Color(ImGuiCol.WindowBg, t.Background with { W = 1f });
+            this.Color(ImGuiCol.ChildBg, System.Numerics.Vector4.Zero);
+            this.Color(ImGuiCol.PopupBg, t.Background with { W = 1f });
+            this.Color(ImGuiCol.Border, t.Border);
+            this.Color(ImGuiCol.Text, t.Text);
+            this.Color(ImGuiCol.TextDisabled, textDisabled);
+            this.Color(ImGuiCol.Button, t.Surface);
+            this.Color(ImGuiCol.ButtonHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.ButtonActive, OmniTheme.ActiveBackground);
+            this.Color(ImGuiCol.Header, t.Surface);
+            this.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.HeaderActive, t.Accent);
+            this.Color(ImGuiCol.FrameBg, t.Surface);
+            this.Color(ImGuiCol.FrameBgHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.FrameBgActive, OmniTheme.ActiveBackground);
+            this.Color(ImGuiCol.Tab, t.Surface);
+            this.Color(ImGuiCol.TabHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.TabActive, t.Accent);
+            this.Color(ImGuiCol.TitleBg, titleBackground);
+            this.Color(ImGuiCol.TitleBgActive, titleActive);
+            this.Color(ImGuiCol.TitleBgCollapsed, titleBackground);
+            this.Color(ImGuiCol.ScrollbarBg, t.Background);
+            this.Color(ImGuiCol.ScrollbarGrab, t.Secondary);
+            this.Color(ImGuiCol.ScrollbarGrabHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.ScrollbarGrabActive, t.Accent);
+            this.Color(ImGuiCol.CheckMark, t.Success);
+            this.Color(ImGuiCol.SliderGrab, t.Secondary);
+            this.Color(ImGuiCol.SliderGrabActive, t.Accent);
+            this.Color(ImGuiCol.Separator, t.Border);
+            this.Color(ImGuiCol.ResizeGrip, t.Surface);
+            this.Color(ImGuiCol.ResizeGripHovered, OmniTheme.HoverBackground);
+            this.Color(ImGuiCol.ResizeGripActive, t.Accent);
+
+            this.Var(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
+            this.Var(ImGuiStyleVar.WindowRounding, OmniTheme.Scale(t.BorderRadius));
+            this.Var(ImGuiStyleVar.WindowBorderSize, OmniTheme.BorderThickness());
+            this.Var(ImGuiStyleVar.FrameRounding, OmniTheme.Scale(t.ButtonRadius));
+            this.Var(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(t.BorderRadius));
+            this.Var(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(t.ButtonRadius));
+            this.Var(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(t.ButtonRadius));
+            this.Var(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f)));
+        }
+
+        public void Dispose()
+        {
+            if (this.vars   > 0) ImGui.PopStyleVar(this.vars);
+            if (this.colors > 0) ImGui.PopStyleColor(this.colors);
+            this.vars   = 0;
+            this.colors = 0;
+        }
+    }
 
     public override bool DrawSettings()
     {
