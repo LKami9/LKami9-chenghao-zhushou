@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "精简设置页：移除窗口贴靠和每页条数选项；每页固定 100，窗口保持自由拖动，继续使用 /L9CHH 和打开时自动扫描。",
-      "Version": "2.12.1",
+      "Description": "修复 TitleList 数据晚到时解锁数量一直为 0：首次收到数据强制刷新，并在 0 解锁时有限次回退扫描，同时刷新状态文本。",
+      "Version": "2.12.2",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "9E2CD964F1A7DACC4682BEF69985E985E310248FA2C7B0BF753DC802979D428D"
+      "Sha256": "CDB1F9EFA2D5BDF4DBA967A9C8418A03E523DEAB8A46BF45A9B48D0984FEEF2F"
     }
   ]
 }

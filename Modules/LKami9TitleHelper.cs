@@ -90,6 +90,8 @@ public sealed class LKami9TitleHelper : ModuleBase
     private readonly HashSet<uint> favoriteIds = [];
     private readonly byte[] unlockSnapshot = new byte[112];
     private bool unlockSnapshotValid;
+    private bool titleDataObserved;
+    private int zeroUnlockRefreshAttempts;
 
     private Dalamud.Interface.ManagedFontAtlas.IFontHandle omniFont;
     private int page = 1;
@@ -255,7 +257,11 @@ public sealed class LKami9TitleHelper : ModuleBase
     private void EnsureDataReady(bool force = false)
     {
         if (force || !this.built) this.Build();
-        else this.RefreshUnlocked();
+        else if (this.RefreshUnlocked())
+        {
+            this.Rebuild();
+            this.UpdateLoadedStatus();
+        }
     }
 
     #endregion
@@ -343,9 +349,10 @@ public sealed class LKami9TitleHelper : ModuleBase
             .OrderBy(x => x, StringComparer.Ordinal));
 
         this.built = true;
+        this.zeroUnlockRefreshAttempts = 0;
         this.RefreshUnlocked(true);
         this.Rebuild();
-        this.status = $"已载入 {this.all.Count} 个称号 · 已解锁 {this.unlockedCount}";
+        this.UpdateLoadedStatus();
     }
 
     private static void PrepareEntry(TitleEntry e)
@@ -374,6 +381,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             var ui = UIState.Instance();
             if (ui == null) return false;
 
+            this.titleDataObserved = ui->TitleList.DataReceived;
             var bits = ui->TitleList.UnlockedTitles;
             if (!force && this.unlockSnapshotValid && bits.SequenceEqual(this.unlockSnapshot))
                 return false;
@@ -390,6 +398,12 @@ public sealed class LKami9TitleHelper : ModuleBase
 
                 e.Unlocked = ok;
                 if (ok) this.unlockedCount++;
+            }
+
+            if (force && this.titleDataObserved)
+            {
+                DalamudServices.PluginLog.Information(
+                    $"[LKami9TitleHelper] unlock refresh: received={this.titleDataObserved}, pending={ui->TitleList.DataPending}, unlocked={this.unlockedCount}");
             }
         }
 
@@ -605,14 +619,30 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         this.nextUnlockRefresh = DateTime.UtcNow.AddSeconds(3);
 
+        var force = false;
         unsafe
         {
             var ui = UIState.Instance();
             if (ui == null || !ui->TitleList.DataReceived) return;
+
+            force = !this.titleDataObserved || ui->TitleList.DataPending;
+            this.titleDataObserved = true;
+            if (this.unlockedCount == 0 && this.zeroUnlockRefreshAttempts < 3)
+            {
+                force = true;
+                this.zeroUnlockRefreshAttempts++;
+            }
         }
 
-        if (this.RefreshUnlocked()) this.Rebuild();
+        if (this.RefreshUnlocked(force))
+        {
+            this.Rebuild();
+            this.UpdateLoadedStatus();
+        }
     }
+
+    private void UpdateLoadedStatus() =>
+        this.status = $"已载入 {this.all.Count} 个称号 · 已解锁 {this.unlockedCount}";
 
     #endregion
 
