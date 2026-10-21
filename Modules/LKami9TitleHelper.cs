@@ -422,6 +422,13 @@ public sealed class LKami9TitleHelper : ModuleBase
                     var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
                     if (contentSize.X > 1f && contentSize.Y > 1f)
                     {
+                        // 玻璃/半透明主题下内容区会透出游戏画面，这里先铺一层不透明底
+                        var t     = OmniTheme.Tokens;
+                        var solid = new System.Numerics.Vector4(t.Background.X, t.Background.Y, t.Background.Z, 1f);
+                        var draw  = ImGui.GetWindowDrawList();
+                        draw.AddRectFilled(contentPos, contentPos + contentSize,
+                            ImGui.GetColorU32(solid), OmniTheme.Scale(t.BorderRadius));
+
                         ImGui.SetCursorScreenPos(contentPos);
                         ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
                         this.DrawContent();
@@ -445,6 +452,14 @@ public sealed class LKami9TitleHelper : ModuleBase
     {
         var tokens = OmniTheme.Tokens;
         var pad    = OmniTheme.Scale(12f);
+
+        // 主题可能是浅色/玻璃主题，直接用 Tokens 当文字色会看不清：
+        // 统一按背景亮度把文字色往黑/白方向推，保证对比度。
+        var back = Opaque(tokens.Background);
+        var cText = Readable(tokens.Text, back);
+        var cDim = Readable(tokens.Secondary, back);
+        var cAccent = Readable(tokens.Accent, back);
+        var cOk = Readable(tokens.Success, back);
 
         ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(6f)));
         ImGui.Indent(pad);
@@ -485,12 +500,12 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         // ── 摘要 ──
         ImGui.Spacing();
-        ImGui.TextColored(tokens.Accent,
+        ImGui.TextColored(cAccent,
             $"共 {this.all.Count} 个称号 · 已解锁 {this.unlockedCount} · 当前列表 {this.view.Count} 条");
         if (this.lastEquipped.Length > 0)
         {
             ImGui.SameLine();
-            ImGui.TextColored(tokens.Success, "· 上次佩戴：" + this.lastEquipped);
+            ImGui.TextColored(cOk, "· 上次佩戴：" + this.lastEquipped);
         }
 
         ImGui.Separator();
@@ -512,10 +527,10 @@ public sealed class LKami9TitleHelper : ModuleBase
 
             ImGui.PushID((int)e.Id);
 
-            ImGui.TextColored(ok ? tokens.Success : tokens.Secondary, ok ? "●" : "○");
+            ImGui.TextColored(ok ? cOk : cDim, ok ? "●" : "○");
             ImGui.SameLine();
 
-            ImGui.TextColored(ok ? tokens.Text : tokens.Secondary, e.Name);
+            ImGui.TextColored(ok ? cText : cDim, e.Name);
             ImGui.SameLine();
             ImGui.TextDisabled($"({kind} · {e.Id})");
 
@@ -532,11 +547,11 @@ public sealed class LKami9TitleHelper : ModuleBase
                 if (e.AchName.Length > 0) line += "【" + e.AchName + "】";
                 if (e.AchCat.Length  > 0) line += "   " + e.AchCat;
                 if (e.AchPoints      > 0) line += $"   {e.AchPoints} 点";
-                ImGui.TextColored(tokens.Secondary, line);
+                ImGui.TextColored(cDim, line);
 
                 if (e.AchDesc.Length > 0)
                 {
-                    ImGui.PushStyleColor(ImGuiCol.Text, tokens.Text with { W = tokens.Text.W * 0.7f });
+                    ImGui.PushStyleColor(ImGuiCol.Text, cDim);
                     ImGui.TextWrapped(e.AchDesc);
                     ImGui.PopStyleColor();
                 }
@@ -576,8 +591,9 @@ public sealed class LKami9TitleHelper : ModuleBase
     public override bool DrawSettings()
     {
         var tokens = OmniTheme.Tokens;
+        var back   = Opaque(tokens.Background);
 
-        ImGui.TextColored(tokens.Accent, "LKami9 称号助手");
+        ImGui.TextColored(Readable(tokens.Accent, back), "LKami9 称号助手");
         ImGui.TextWrapped("主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
         ImGui.Spacing();
@@ -596,6 +612,34 @@ public sealed class LKami9TitleHelper : ModuleBase
         return true;
     }
 
+
+    private static System.Numerics.Vector4 Opaque(System.Numerics.Vector4 c) => c with { W = 1f };
+
+    private static float Lum(System.Numerics.Vector4 c) => 0.2126f * c.X + 0.7152f * c.Y + 0.0722f * c.Z;
+
+    private static float Contrast(System.Numerics.Vector4 a, System.Numerics.Vector4 b)
+    {
+        var la = Lum(a) + 0.05f;
+        var lb = Lum(b) + 0.05f;
+        return la > lb ? la / lb : lb / la;
+    }
+
+    /// <summary>把前景色推到与背景对比度 ≥ 4.5（浅底推暗、深底推亮）。</summary>
+    private static System.Numerics.Vector4 Readable(System.Numerics.Vector4 fg, System.Numerics.Vector4 bg)
+    {
+        fg = Opaque(fg);
+        var lightBg = Lum(bg) > 0.5f;
+
+        for (var i = 0; i < 24 && Contrast(fg, bg) < 4.5f; i++)
+        {
+            fg = lightBg
+                ? new System.Numerics.Vector4(fg.X * 0.82f, fg.Y * 0.82f, fg.Z * 0.82f, 1f)
+                : System.Numerics.Vector4.Lerp(fg, System.Numerics.Vector4.One, 0.18f);
+        }
+
+        return fg;
+    }
+
     private static void PushOmniWindowStyle()
     {
         var tokens         = OmniTheme.Tokens;
@@ -604,7 +648,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var titleActive     = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Accent,  0.65f);
 
         ImGui.PushStyleColor(ImGuiCol.WindowBg, tokens.Background with { W = 1f });
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, System.Numerics.Vector4.Zero);
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new System.Numerics.Vector4(tokens.Background.X, tokens.Background.Y, tokens.Background.Z, 1f));
         ImGui.PushStyleColor(ImGuiCol.PopupBg, tokens.Background with { W = 1f });
         ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border);
         ImGui.PushStyleColor(ImGuiCol.Text, tokens.Text);
