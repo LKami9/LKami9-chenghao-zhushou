@@ -685,7 +685,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                 var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
                 if (contentSize.X > 1f && contentSize.Y > 1f)
                 {
-                    var panel = Opaque(tokens.Background);
+                    var panel = PanelColor(tokens);
 
                     ImGui.SetCursorScreenPos(contentPos);
                     ImGui.BeginChild("###LKami9TitleContent", contentSize, false,
@@ -919,6 +919,14 @@ public sealed class LKami9TitleHelper : ModuleBase
         ImGui.Unindent(pad);
     }
 
+    /// <summary>面板色：比主题背景略深一档，用来做背景板，避免整片同色发亮。</summary>
+    private static System.Numerics.Vector4 PanelColor(OmniToolbox.UI.Theme.ThemeTokens t)
+    {
+        var bg   = t.Background;
+        var dark = new System.Numerics.Vector4(bg.X * 0.90f, bg.Y * 0.90f, bg.Z * 0.88f, 1f);
+        return System.Numerics.Vector4.Lerp(dark, System.Numerics.Vector4.One, 0.06f);
+    }
+
     private void DrawRow(TitleEntry e,
                          System.Numerics.Vector4 cDim,
                          System.Numerics.Vector4 cOk)
@@ -1033,11 +1041,24 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     public override bool DrawSettings()
     {
-        var tokens = OmniTheme.Tokens;
-        var back   = Opaque(tokens.Background);
+        var tokens  = OmniTheme.Tokens;
+        var panel   = PanelColor(tokens);
+        var cAccent = Opaque(tokens.Accent);
+        var cText   = Opaque(tokens.Text);
+        var cDim    = Opaque(tokens.Secondary);
 
-        ImGui.TextColored(Opaque(tokens.Accent), "LKami9 称号助手");
-        WrappedTextColored(Opaque(tokens.Secondary),
+        // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, panel);
+        ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border);
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
+        ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
+
+        ImGui.BeginChild("###LKami9TitleSettingsPanel",
+            new System.Numerics.Vector2(0f, MathF.Max(OmniTheme.Scale(140f), ImGui.GetContentRegionAvail().Y)),
+            true, ImGuiWindowFlags.None);
+
+        ImGui.TextColored(cAccent, "LKami9 称号助手");
+        WrappedTextColored(cText,
             "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
         var changed = false;
@@ -1069,7 +1090,11 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.Spacing();
-        ImGui.TextColored(Opaque(tokens.Secondary), this.status);
+        ImGui.TextColored(cDim, this.status);
+
+        ImGui.EndChild();
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor(2);
 
         // 按官方规范：只有配置真的变了才返回 true，让宿主保存
         return changed;

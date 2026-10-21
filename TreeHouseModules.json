@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "新增「随机称号」按钮（随机佩戴已解锁称号，避开上次抽到的）与 /omni LKami9TitleHelper random 命令；窗口自由拖动、仅保留列表滚动条。",
-      "Version": "2.4.0",
+      "Description": "设置页与独立窗口都加背景板（比主题背景略深一档），解决整片过亮刺眼；含随机称号按钮、Omni 字体配色、自由拖动。",
+      "Version": "2.5.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "26D295E1C915F4455D09B8AE07EF625C1266994DBA70D73DDC9143DCF86E680A"
+      "Sha256": "16B97C00A7CD61A719C262E7312135ABFB2588C2F10CF1CAA1F10E0CD0969099"
     }
   ]
 }
