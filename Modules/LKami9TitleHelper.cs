@@ -1062,17 +1062,33 @@ public sealed class LKami9TitleHelper : ModuleBase
         // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼。
         // 走 OmniStyleScope（自计数 + using），即使中途异常也必定弹回。
         using var panelScope = new OmniStyleScope();
-        panelScope.Color(ImGuiCol.ChildBg, panel);
+        panelScope.Color(ImGuiCol.ChildBg, System.Numerics.Vector4.Zero);
         panelScope.Color(ImGuiCol.Border, tokens.Border);
         panelScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
         panelScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 
         panelScope.Var(ImGuiStyleVar.WindowPadding, OmniTheme.Scale(new System.Numerics.Vector2(10f, 8f)));
 
-        // 尺寸给 (0,0) = 按内容自适应；同时禁掉滚动条，面板不再是"带滚动条的大框"
+        // 宿主会在 DrawSettings() 返回后继续绘制命令列表。底板必须先铺到当前内容区的
+        // 完整范围，并让这里的子窗口保持透明，命令文字才会落在同一块板上。
+        var panelPos  = ImGui.GetCursorScreenPos();
+        var available = ImGui.GetContentRegionAvail();
+        var panelSize = new System.Numerics.Vector2(
+            MathF.Max(1f, available.X),
+            MathF.Max(OmniTheme.Scale(160f), available.Y));
+        var panelRadius = OmniTheme.Scale(tokens.BorderRadius);
+        var draw        = ImGui.GetWindowDrawList();
+
+        draw.AddRectFilled(panelPos, panelPos + panelSize,
+            ImGui.GetColorU32(Opaque(panel)), panelRadius);
+        draw.AddRect(panelPos, panelPos + panelSize,
+            ImGui.GetColorU32(tokens.Border), panelRadius,
+            ImDrawFlags.None, OmniTheme.BorderThickness());
+
+        // 透明子窗口负责布局与控件，底板和边框由父窗口 DrawList 统一覆盖命令区。
         ImGui.BeginChild("###LKami9TitleSettingsPanel",
-            new System.Numerics.Vector2(0f, MathF.Max(OmniTheme.Scale(160f), ImGui.GetContentRegionAvail().Y)),
-            true,
+            new System.Numerics.Vector2(0f, panelSize.Y),
+            false,
             ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
         ImGui.TextColored(cAccent, "LKami9 称号助手");
