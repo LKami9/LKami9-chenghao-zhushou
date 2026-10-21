@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "恢复 v2.11.1 的启用即扫描时机，修复 2.12 初始化时序回归；保留 TitleList 首次接收强制刷新、0 解锁回退与诊断日志。",
-      "Version": "2.12.4",
+      "Description": "改为手动解锁检测：只有点击「立即检测」或使用 /L9CHH detect 时扫描已解锁称号，并保存本地快照；后续加载快照，再次点击更新。",
+      "Version": "2.13.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "B673ED46CF726E6AC88A02E47E034C5274A2F7CE46537424575039775A61AD83"
+      "Sha256": "53671FEC7DE4BD6035EEB8F25D03315C75DDFE34E5F4E85FA919ECF403BD5095"
     }
   ]
 }

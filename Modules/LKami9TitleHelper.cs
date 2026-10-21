@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Text.Json;
 
 using Dalamud.Bindings.ImGui;
 using Dalamud.Game.Command;
@@ -51,6 +53,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             new("按关键词搜索",   "/L9CHH search 关键字"),
             new("按 ID 佩戴称号", "/L9CHH equip 123"),
             new("随机佩戴已解锁称号", "/L9CHH random"),
+            new("立即检测已解锁称号", "/L9CHH detect"),
         ],
     };
 
@@ -60,6 +63,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     private const string CollapseId    = "###LKami9TitleCollapse";
     private const string CloseId       = "###LKami9TitleClose";
     private const string ShortCommand  = "/L9CHH";
+    private const string UnlockSnapshotFileName = "LKami9TitleHelper.unlocked.json";
     private ICommandManager shortCommandManager;
     private bool shortCommandRegistered;
 
@@ -88,10 +92,10 @@ public sealed class LKami9TitleHelper : ModuleBase
     private readonly List<TitleEntry> view = [];
     private readonly Dictionary<uint, TitleEntry> byId = [];
     private readonly HashSet<uint> favoriteIds = [];
-    private readonly byte[] unlockSnapshot = new byte[112];
-    private bool unlockSnapshotValid;
-    private bool titleDataObserved;
-    private int zeroUnlockRefreshAttempts;
+    private bool unlockDetectionPending;
+    private DateTime nextUnlockDetectionCheck = DateTime.MinValue;
+    private DateTime nextUnlockDetectionRequest = DateTime.MinValue;
+    private DateTimeOffset? unlockSnapshotSavedAt;
 
     private Dalamud.Interface.ManagedFontAtlas.IFontHandle omniFont;
     private int page = 1;
@@ -101,7 +105,7 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     private bool   built;
     private string search  = string.Empty;
-    private string status  = "尚未载入。";
+    private string status  = "尚未检测。点击「立即检测」读取并保存已解锁称号。";
     private string lastEquipped = string.Empty;
 
     private bool    unlockedOnly;
@@ -126,15 +130,13 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.RefreshFavoriteCache();
         this.RegisterShortCommand();
         DalamudServices.PluginLog.Information(
-            $"[LKami9TitleHelper] enabled 2.12.4: windowOpen={this.config.WindowOpen}, shortCommand={this.shortCommandRegistered}");
-
-        // 与 v2.11.1 的已知正常时机保持一致：模块启用即建立称号数据，
-        // 不等待窗口首次打开，避免 TitleList 请求时序变化导致解锁位图为空。
-        this.EnsureDataReady();
+            $"[LKami9TitleHelper] enabled local-manual: windowOpen={this.config.WindowOpen}, shortCommand={this.shortCommandRegistered}");
+        if (this.config.WindowOpen) this.EnsureDataReady();
     }
 
     protected override void OnDisable()
     {
+        this.unlockDetectionPending = false;
         this.UnregisterShortCommand();
         DalamudServices.PluginInterface.UiBuilder.Draw -= this.DrawWindow;
         DalamudServices.Framework.Update                -= this.OnFrameworkUpdate;
@@ -182,7 +184,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     {
         this.config.WindowOpen = false;
         this.config.Ascending  = true;
-        this.config.ScanOnOpen = true;
+        this.config.ScanOnOpen = false;
         this.config.DockToOmni = true;
         this.config.AutoExpandLocked = false;
         this.config.PageSize = 100;
@@ -224,6 +226,10 @@ public sealed class LKami9TitleHelper : ModuleBase
                 this.ToggleWindow(true);
                 return true;
 
+            case "detect":
+                this.RequestUnlockDetection();
+                return true;
+
             case "equip":
                 if (!uint.TryParse(arg, out var id)) { this.status = "用法：/L9CHH equip <称号ID>"; return true; }
                 this.Equip(id);
@@ -234,10 +240,10 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
     }
 
-    /// <summary>旧配置迁移：v2.3 起默认自由拖动；v2.12 起每页 100 条并自动扫描。</summary>
+    /// <summary>旧配置迁移：v2.13 起取消自动解锁扫描，改为手动检测。</summary>
     private void MigrateConfig()
     {
-        if (this.config.ConfigVersion >= 4) return;
+        if (this.config.ConfigVersion >= 5) return;
 
         if (this.config.ConfigVersion < 2)
         {
@@ -245,10 +251,10 @@ public sealed class LKami9TitleHelper : ModuleBase
             if (this.config.PageSize > 60) this.config.PageSize = 40;
         }
 
-        this.config.ScanOnOpen       = true;
+        this.config.ScanOnOpen       = false;
         this.config.AutoExpandLocked = false;
         this.config.PageSize         = 100;
-        this.config.ConfigVersion    = 4;
+        this.config.ConfigVersion    = 5;
     }
 
     private void ToggleWindow(bool open)
@@ -261,11 +267,6 @@ public sealed class LKami9TitleHelper : ModuleBase
     private void EnsureDataReady(bool force = false)
     {
         if (force || !this.built) this.Build();
-        else if (this.RefreshUnlocked())
-        {
-            this.Rebuild();
-            this.UpdateLoadedStatus();
-        }
     }
 
     #endregion
@@ -296,13 +297,6 @@ public sealed class LKami9TitleHelper : ModuleBase
                     byTitle[tid] = (ach.Name.ToString(), Condense(ach.Description.ToString()), cat, ach.Points, ach.RowId);
                 }
                 catch { }
-            }
-
-            unsafe
-            {
-                var ui = UIState.Instance();
-                if (ui != null && !ui->TitleList.DataReceived && !ui->TitleList.DataRequested)
-                    ui->TitleList.RequestTitleList();
             }
 
             this.all.Capacity = Math.Max(this.all.Capacity, titles.Count);
@@ -353,10 +347,11 @@ public sealed class LKami9TitleHelper : ModuleBase
             .OrderBy(x => x, StringComparer.Ordinal));
 
         this.built = true;
-        this.zeroUnlockRefreshAttempts = 0;
-        this.RefreshUnlocked(true);
+        this.LoadUnlockSnapshot();
         this.Rebuild();
         this.UpdateLoadedStatus();
+        DalamudServices.PluginLog.Information(
+            $"[LKami9TitleHelper] build complete: titles={this.all.Count}, savedUnlocked={this.unlockedCount}");
     }
 
     private static void PrepareEntry(TitleEntry e)
@@ -378,43 +373,136 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
     }
 
-    private bool RefreshUnlocked(bool force = false)
+    private unsafe bool ScanUnlockedNow()
     {
-        unsafe
+        var ui = UIState.Instance();
+        if (ui == null) return false;
+
+        this.unlockedCount = 0;
+        foreach (var e in this.all)
         {
-            var ui = UIState.Instance();
-            if (ui == null) return false;
+            bool ok;
+            try { ok = ui->TitleList.IsTitleUnlocked((ushort)e.Id); }
+            catch { ok = false; }
 
-            var received = ui->TitleList.DataReceived;
-            force = force || (received && !this.titleDataObserved);
-            this.titleDataObserved = received;
-            var bits = ui->TitleList.UnlockedTitles;
-            if (!force && this.titleDataObserved &&
-                this.unlockSnapshotValid && bits.SequenceEqual(this.unlockSnapshot))
-                return false;
-
-            bits.CopyTo(this.unlockSnapshot);
-            this.unlockSnapshotValid = true;
-            this.unlockedCount = 0;
-
-            foreach (var e in this.all)
-            {
-                bool ok;
-                try { ok = ui->TitleList.IsTitleUnlocked((ushort)e.Id); }
-                catch { ok = false; }
-
-                e.Unlocked = ok;
-                if (ok) this.unlockedCount++;
-            }
-
-            if (force && this.titleDataObserved)
-            {
-                DalamudServices.PluginLog.Information(
-                    $"[LKami9TitleHelper] unlock refresh: received={this.titleDataObserved}, pending={ui->TitleList.DataPending}, unlocked={this.unlockedCount}");
-            }
+            e.Unlocked = ok;
+            if (ok) this.unlockedCount++;
         }
 
+        DalamudServices.PluginLog.Information(
+            $"[LKami9TitleHelper] manual detect complete: unlocked={this.unlockedCount}");
+
         return true;
+    }
+
+    private unsafe void RequestUnlockDetection()
+    {
+        this.EnsureDataReady();
+        if (!DalamudServices.PlayerState.IsLoaded)
+        {
+            this.unlockDetectionPending = true;
+            this.status = "等待角色载入后检测称号…";
+            return;
+        }
+
+        var ui = UIState.Instance();
+        if (ui == null)
+        {
+            this.status = "无法读取称号数据：UIState 不可用。";
+            return;
+        }
+
+        if (!ui->TitleList.DataReceived)
+        {
+            this.unlockDetectionPending = true;
+            this.nextUnlockDetectionRequest = DateTime.UtcNow.AddSeconds(2);
+            try { ui->TitleList.RequestTitleList(); } catch { }
+            this.status = "正在请求称号数据，收到后会自动完成检测…";
+            return;
+        }
+
+        this.CompleteUnlockDetection();
+    }
+
+    private void CompleteUnlockDetection()
+    {
+        this.unlockDetectionPending = false;
+        if (!this.ScanUnlockedNow())
+        {
+            this.status = "检测失败：无法读取称号状态。";
+            return;
+        }
+
+        this.SaveUnlockSnapshot();
+        this.Rebuild();
+        this.UpdateLoadedStatus();
+    }
+
+    private string UnlockSnapshotPath()
+    {
+        var directory = DalamudServices.PluginInterface.ConfigDirectory;
+        Directory.CreateDirectory(directory.FullName);
+        return Path.Combine(directory.FullName, UnlockSnapshotFileName);
+    }
+
+    private void LoadUnlockSnapshot()
+    {
+        this.unlockSnapshotSavedAt = null;
+        this.unlockedCount = 0;
+        foreach (var entry in this.all) entry.Unlocked = false;
+
+        try
+        {
+            var path = this.UnlockSnapshotPath();
+            if (!File.Exists(path)) return;
+
+            var snapshot = JsonSerializer.Deserialize<LKami9TitleUnlockSnapshot>(File.ReadAllText(path));
+            if (snapshot?.UnlockedTitleIds == null) return;
+
+            var ids = snapshot.UnlockedTitleIds.ToHashSet();
+            foreach (var entry in this.all)
+            {
+                entry.Unlocked = ids.Contains(entry.Id);
+                if (entry.Unlocked) this.unlockedCount++;
+            }
+
+            this.unlockSnapshotSavedAt = snapshot.SavedAt;
+        }
+        catch (Exception ex)
+        {
+            DalamudServices.PluginLog.Warning(ex, "[LKami9TitleHelper] load unlock snapshot failed");
+            this.status = "读取上次检测数据失败，请重新点击「立即检测」。";
+        }
+    }
+
+    private void SaveUnlockSnapshot()
+    {
+        try
+        {
+            var snapshot = new LKami9TitleUnlockSnapshot
+            {
+                SavedAt = DateTimeOffset.Now,
+                UnlockedTitleIds = this.all
+                    .Where(x => x.Unlocked)
+                    .Select(x => x.Id)
+                    .OrderBy(x => x)
+                    .ToList(),
+            };
+
+            var path = this.UnlockSnapshotPath();
+            var temp = path + ".tmp";
+            File.WriteAllText(temp, JsonSerializer.Serialize(snapshot, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+            }));
+            File.Move(temp, path, true);
+            this.unlockSnapshotSavedAt = snapshot.SavedAt;
+        }
+        catch (Exception ex)
+        {
+            DalamudServices.PluginLog.Warning(ex, "[LKami9TitleHelper] save unlock snapshot failed");
+            this.status = "检测完成，但保存本地数据失败。";
+        }
     }
 
     private static string Condense(string s)
@@ -616,42 +704,51 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.Rebuild();
     }
 
-    private DateTime nextUnlockRefresh = DateTime.MinValue;
-
     private void OnFrameworkUpdate(IFramework framework)
     {
+        if (!this.unlockDetectionPending) return;
         if (!this.built) return;
-        if (!this.config.WindowOpen) return;
-        if (DateTime.UtcNow < this.nextUnlockRefresh) return;
+        if (DateTime.UtcNow < this.nextUnlockDetectionCheck) return;
+        this.nextUnlockDetectionCheck = DateTime.UtcNow.AddMilliseconds(500);
 
-        this.nextUnlockRefresh = DateTime.UtcNow.AddSeconds(3);
+        if (!DalamudServices.PlayerState.IsLoaded)
+        {
+            this.status = "等待角色载入后检测称号…";
+            return;
+        }
 
-        var force = false;
         unsafe
         {
             var ui = UIState.Instance();
-            if (ui == null || !ui->TitleList.DataReceived) return;
-
-            force = !this.titleDataObserved || ui->TitleList.DataPending;
-            this.titleDataObserved = true;
-            if (this.unlockedCount == 0 && this.zeroUnlockRefreshAttempts < 3)
+            if (ui == null)
             {
-                force = true;
-                this.zeroUnlockRefreshAttempts++;
+                this.unlockDetectionPending = false;
+                this.status = "检测失败：无法读取称号状态。";
+                return;
+            }
+
+            if (!ui->TitleList.DataReceived)
+            {
+                if (DateTime.UtcNow >= this.nextUnlockDetectionRequest)
+                {
+                    try { ui->TitleList.RequestTitleList(); } catch { }
+                    this.nextUnlockDetectionRequest = DateTime.UtcNow.AddSeconds(2);
+                    DalamudServices.PluginLog.Information(
+                        $"[LKami9TitleHelper] manual detect waiting: received=false, requested={ui->TitleList.DataRequested}, pending={ui->TitleList.DataPending}");
+                }
+                return;
             }
         }
 
-        if (this.RefreshUnlocked(force))
-        {
-            this.Rebuild();
-            this.UpdateLoadedStatus();
-        DalamudServices.PluginLog.Information(
-            $"[LKami9TitleHelper] build complete: titles={this.all.Count}, unlocked={this.unlockedCount}, dataReceived={this.titleDataObserved}");
-        }
+        this.CompleteUnlockDetection();
     }
 
-    private void UpdateLoadedStatus() =>
-        this.status = $"已载入 {this.all.Count} 个称号 · 已解锁 {this.unlockedCount}";
+    private void UpdateLoadedStatus()
+    {
+        this.status = this.unlockSnapshotSavedAt is { } savedAt
+            ? $"已载入 {this.all.Count} 个称号 · 上次检测解锁 {this.unlockedCount} 个 · {savedAt:MM-dd HH:mm:ss}"
+            : $"已载入 {this.all.Count} 个称号 · 尚未检测，请点击「立即检测」。";
+    }
 
     #endregion
 
@@ -1018,6 +1115,9 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.SameLine();
+        if (OmniControls.SmallButton("检测", false)) this.RequestUnlockDetection();
+
+        ImGui.SameLine();
         ImGui.BeginDisabled(this.search.Length == 0 && this.config.CategoryFilter.Length == 0);
         if (OmniControls.SmallButton("清空", false))
         {
@@ -1279,6 +1379,9 @@ public sealed class LKami9TitleHelper : ModuleBase
             changed = true;
         }
 
+        ImGui.SameLine();
+        if (ImGui.Button("立即检测")) this.RequestUnlockDetection();
+
         var autoExpand = this.config.AutoExpandLocked;
         if (ImGui.Checkbox("默认展开未解锁称号", ref autoExpand))
         {
@@ -1330,11 +1433,18 @@ public sealed class LKami9TitleHelperConfig
 {
     public bool WindowOpen { get; set; }
     public bool Ascending  { get; set; } = true;
-    public bool ScanOnOpen { get; set; } = true;
+    public bool ScanOnOpen { get; set; }
     public bool DockToOmni { get; set; } = false;
     public bool AutoExpandLocked { get; set; }
     public int  ConfigVersion { get; set; }
     public int  PageSize   { get; set; } = 100;
     public string CategoryFilter { get; set; } = string.Empty;
     public List<uint> Favorites { get; set; } = [];
+}
+
+public sealed class LKami9TitleUnlockSnapshot
+{
+    public int Version { get; set; } = 1;
+    public DateTimeOffset SavedAt { get; set; }
+    public List<uint> UnlockedTitleIds { get; set; } = [];
 }
