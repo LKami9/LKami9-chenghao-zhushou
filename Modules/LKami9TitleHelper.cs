@@ -38,10 +38,6 @@ namespace LKami9.TitleHelper;
 /// </summary>
 public sealed class LKami9TitleHelper : ModuleBase
 {
-    private const string WindowId      = "###LKami9TitleMainWindow";
-    private const string CollapseId    = "###LKami9TitleCollapse";
-    private const string CloseId       = "###LKami9TitleClose";
-
     public override ModuleInfo Info { get; } = new()
     {
         Title       = "LKami9称号助手",
@@ -58,6 +54,11 @@ public sealed class LKami9TitleHelper : ModuleBase
     };
 
     public override bool HasSettings => true;
+
+    private const string WindowId      = "###LKami9TitleMainWindow";
+    private const string CollapseId    = "###LKami9TitleCollapse";
+    private const string CloseId       = "###LKami9TitleClose";
+
 
     private LKami9TitleHelperConfig config = new();
 
@@ -803,23 +804,30 @@ public sealed class LKami9TitleHelper : ModuleBase
         WrappedTextColored(Readable(tokens.Secondary, back),
             "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
+        var changed = false;
+
         ImGui.Spacing();
         if (OmniControls.SmallButton(this.config.WindowOpen ? "关闭窗口" : "打开窗口", false))
+        {
             this.ToggleWindow(!this.config.WindowOpen);
+            changed = true;
+        }
 
         ImGui.SameLine();
         if (OmniControls.SmallButton("重新扫描", false)) this.Build();
 
         ImGui.Spacing();
         var scan = this.config.ScanOnOpen;
-        if (OmniControls.Checkbox("启用时自动扫描称号", ref scan)) this.config.ScanOnOpen = scan;
+        if (OmniControls.Checkbox("启用时自动扫描称号", ref scan)) { this.config.ScanOnOpen = scan; changed = true; }
 
         var dock = this.config.DockToOmni;
-        if (OmniControls.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) this.config.DockToOmni = dock;
+        if (OmniControls.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
 
         ImGui.Spacing();
         ImGui.TextColored(Readable(tokens.Secondary, back), this.status);
-        return true;
+
+        // 按官方规范：只有配置真的变了才返回 true，让宿主保存
+        return changed;
     }
 
 
