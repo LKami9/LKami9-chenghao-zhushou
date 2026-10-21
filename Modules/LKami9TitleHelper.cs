@@ -1047,11 +1047,13 @@ public sealed class LKami9TitleHelper : ModuleBase
         var cText   = Opaque(tokens.Text);
         var cDim    = Opaque(tokens.Secondary);
 
-        // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, panel);
-        ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border);
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
+        // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼。
+        // 走 OmniStyleScope（自计数 + using），即使中途异常也必定弹回。
+        using var panelScope = new OmniStyleScope();
+        panelScope.Color(ImGuiCol.ChildBg, panel);
+        panelScope.Color(ImGuiCol.Border, tokens.Border);
+        panelScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
+        panelScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 
         ImGui.BeginChild("###LKami9TitleSettingsPanel",
             new System.Numerics.Vector2(0f, MathF.Max(OmniTheme.Scale(140f), ImGui.GetContentRegionAvail().Y)),
@@ -1093,8 +1095,6 @@ public sealed class LKami9TitleHelper : ModuleBase
         ImGui.TextColored(cDim, this.status);
 
         ImGui.EndChild();
-        ImGui.PopStyleVar(2);
-        ImGui.PopStyleColor(2);
 
         // 按官方规范：只有配置真的变了才返回 true，让宿主保存
         return changed;

@@ -6,10 +6,10 @@
       "Name": "LKami9称号助手",
       "Author": "LKami9",
       "Description": "设置页与独立窗口都加背景板（比主题背景略深一档），解决整片过亮刺眼；含随机称号按钮、Omni 字体配色、自由拖动。",
-      "Version": "2.5.0",
+      "Version": "2.5.1",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "16B97C00A7CD61A719C262E7312135ABFB2588C2F10CF1CAA1F10E0CD0969099"
+      "Sha256": "FA7CD8C1A93D3E027DAC7B99DD7301A25C78311589867D60FF67535D75AFB58B"
     }
   ]
 }
