@@ -898,15 +898,23 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (this.page > pageCount) this.page = pageCount;
         if (this.page < 1) this.page = 1;
 
-        ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false, ImGuiWindowFlags.None);
-        FillCurrentWindow(panel, OmniTheme.Scale(tokens.BorderRadius));
+        using (var listScope = new OmniStyleScope())
+        {
+            listScope.Color(ImGuiCol.ChildBg, panel);
+            listScope.Color(ImGuiCol.Border, tokens.Border);
+            listScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
+            listScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
+
+            ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), true,
+                ImGuiWindowFlags.None);
 
         var from = (this.page - 1) * pageSize;
         var to   = Math.Min(this.view.Count, from + pageSize);
         for (var i = from; i < to; i++)
             this.DrawRow(this.view[i], cDim, cOk);
 
-        ImGui.EndChild();
+            ImGui.EndChild();
+        }
 
         // Omni 原生分页器
         var pageLocal = this.page;
@@ -922,8 +930,10 @@ public sealed class LKami9TitleHelper : ModuleBase
     /// <summary>面板色：比主题背景略深一档，用来做背景板，避免整片同色发亮。</summary>
     private static System.Numerics.Vector4 PanelColor(OmniToolbox.UI.Theme.ThemeTokens t)
     {
-        // 取「背景」与「表面」的中点：既不与窗口同色发亮，也不会显脏
-        return System.Numerics.Vector4.Lerp(Opaque(t.Background), Opaque(t.Surface), 0.5f);
+        // 底板要比窗口底色略深一点，才看得出"这是一块板"；再掺一点 Surface 保持主题感
+        var bg     = Opaque(t.Background);
+        var darker = new System.Numerics.Vector4(bg.X * 0.94f, bg.Y * 0.94f, bg.Z * 0.92f, 1f);
+        return System.Numerics.Vector4.Lerp(darker, Opaque(t.Surface), 0.2f);
     }
 
     private void DrawRow(TitleEntry e,
@@ -1057,9 +1067,10 @@ public sealed class LKami9TitleHelper : ModuleBase
         panelScope.Var(ImGuiStyleVar.WindowPadding, OmniTheme.Scale(new System.Numerics.Vector2(10f, 8f)));
 
         // 尺寸给 (0,0) = 按内容自适应；同时禁掉滚动条，面板不再是"带滚动条的大框"
-        ImGui.BeginChild("###LKami9TitleSettingsPanel", System.Numerics.Vector2.Zero, true,
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse |
-            ImGuiWindowFlags.AlwaysAutoResize);
+        ImGui.BeginChild("###LKami9TitleSettingsPanel",
+            new System.Numerics.Vector2(0f, MathF.Max(OmniTheme.Scale(160f), ImGui.GetContentRegionAvail().Y)),
+            true,
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
         ImGui.TextColored(cAccent, "LKami9 称号助手");
         WrappedTextColored(cText,

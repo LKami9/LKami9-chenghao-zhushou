@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "设置页背景板改为「背景与表面各半」的柔和色、按内容自适应高度并去掉滚动条；独立窗口面板同步换色。",
-      "Version": "2.6.0",
+      "Description": "背景板改为略深底板并铺满：设置页覆盖整个模块区域（无滚动条），独立窗口的称号列表整块铺底。",
+      "Version": "2.7.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "CCBA93AFE0742C30536699F150FBD62B957B391A2100340FFC2F16C450EF46A8"
+      "Sha256": "79037DD373DB0EBD4F925350972983C756EF012F31159BBA800687D7471411EB"
     }
   ]
 }
