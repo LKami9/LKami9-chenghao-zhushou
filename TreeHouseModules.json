@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "Omni 组件版：称号检索/一键佩戴/未解锁获取方式，新增成就进度查询与「加入成就监视」；独立窗口贴靠 Omni 主体、层级排在其后；全程不碰全局样式栈。",
-      "Version": "1.2.1",
+      "Description": "Omni 组件版独立窗口：搜索/分类下拉/收藏/分页（OmniPager）/右键菜单（Omni 弹层背景）/成就进度与监视；窗口贴靠 Omni 主体并排在其后，全程不碰全局样式栈。",
+      "Version": "2.0.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "91EC34C134550C42116FDAA5024EF626E9667846648B7F071263EC96B5F4D2DE"
+      "Sha256": "AB381003A0E638E8B43EFD9C8CDA723EE891E11CF0CC3ECFC3610E50D6B43591"
     }
   ]
 }
