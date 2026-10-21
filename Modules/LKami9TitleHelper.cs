@@ -75,11 +75,19 @@ public sealed class LKami9TitleHelper : ModuleBase
         public string AchCat  = string.Empty;
         public byte   AchPoints;
         public uint   AchId;
+        public bool   Unlocked;
+        public string LabelLocked     = string.Empty;
+        public string LabelUnlocked   = string.Empty;
+        public string AchievementLine = string.Empty;
+        public string SearchKey       = string.Empty;
     }
 
     private readonly List<TitleEntry> all  = [];
     private readonly List<TitleEntry> view = [];
-    private readonly Dictionary<uint, bool> unlocked = [];
+    private readonly Dictionary<uint, TitleEntry> byId = [];
+    private readonly HashSet<uint> favoriteIds = [];
+    private readonly byte[] unlockSnapshot = new byte[112];
+    private bool unlockSnapshotValid;
 
     private Dalamud.Interface.ManagedFontAtlas.IFontHandle omniFont;
     private int page = 1;
@@ -111,6 +119,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         DalamudServices.Framework.Update                += this.OnFrameworkUpdate;
 
         this.MigrateConfig();
+        this.RefreshFavoriteCache();
 
         if (this.config.ScanOnOpen || !this.built) this.Build();
     }
@@ -127,6 +136,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.config.Ascending  = true;
         this.config.ScanOnOpen = true;
         this.config.DockToOmni = true;
+        this.config.AutoExpandLocked = false;
         this.collapsed         = false;
         this.resizePending     = true;
         return true;
@@ -174,14 +184,19 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
     }
 
-    /// <summary>旧配置迁移：v2.3 起默认窗口自由拖动、每页 40 条。</summary>
+    /// <summary>旧配置迁移：v2.3 起默认自由拖动；v2.11 起默认收起未解锁详情。</summary>
     private void MigrateConfig()
     {
-        if (this.config.ConfigVersion >= 2) return;
+        if (this.config.ConfigVersion >= 3) return;
 
-        this.config.DockToOmni  = false;
-        if (this.config.PageSize > 60) this.config.PageSize = 40;
-        this.config.ConfigVersion = 2;
+        if (this.config.ConfigVersion < 2)
+        {
+            this.config.DockToOmni  = false;
+            if (this.config.PageSize > 60) this.config.PageSize = 40;
+        }
+
+        this.config.AutoExpandLocked = false;
+        this.config.ConfigVersion = 3;
     }
 
     private void ToggleWindow(bool open)
@@ -197,7 +212,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     private void Build()
     {
         this.all.Clear();
-        this.unlocked.Clear();
+        this.byId.Clear();
 
         try
         {
@@ -205,7 +220,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             var titles       = DalamudServices.DataManager.GetExcelSheet<Title>();
             if (achievements == null || titles == null) { this.status = "取不到称号 / 成就数据表。"; return; }
 
-            var byTitle = new Dictionary<uint, (string Name, string Desc, string Cat, byte Points, uint AchId)>();
+            var byTitle = new Dictionary<uint, (string Name, string Desc, string Cat, byte Points, uint AchId)>(achievements.Count);
             foreach (var ach in achievements)
             {
                 try
@@ -223,9 +238,11 @@ public sealed class LKami9TitleHelper : ModuleBase
             unsafe
             {
                 var ui = UIState.Instance();
-                if (ui != null && !ui->TitleList.DataReceived) ui->TitleList.RequestTitleList();
+                if (ui != null && !ui->TitleList.DataReceived && !ui->TitleList.DataRequested)
+                    ui->TitleList.RequestTitleList();
             }
 
+            this.all.Capacity = Math.Max(this.all.Capacity, titles.Count);
             foreach (var t in titles)
             {
                 try
@@ -251,7 +268,9 @@ public sealed class LKami9TitleHelper : ModuleBase
                         e.AchId     = a.AchId;
                     }
 
+                    PrepareEntry(e);
                     this.all.Add(e);
+                    this.byId[e.Id] = e;
                 }
                 catch { }
             }
@@ -271,20 +290,45 @@ public sealed class LKami9TitleHelper : ModuleBase
             .OrderBy(x => x, StringComparer.Ordinal));
 
         this.built = true;
-        this.RefreshUnlocked();
+        this.RefreshUnlocked(true);
         this.Rebuild();
         this.status = $"已载入 {this.all.Count} 个称号 · 已解锁 {this.unlockedCount}";
     }
 
-    private void RefreshUnlocked()
+    private static void PrepareEntry(TitleEntry e)
     {
-        this.unlocked.Clear();
-        this.unlockedCount = 0;
+        var kind = e.IsPrefix ? "前缀" : "后缀";
+        var id   = e.Id.ToString();
+        var tail = string.Concat("    (", kind, " · ", id, ")");
 
+        e.LabelLocked   = string.Concat("[未解锁]  ", e.Name, tail);
+        e.LabelUnlocked = string.Concat("[已解锁]  ", e.Name, tail);
+        e.SearchKey     = string.Concat(e.Name, "\n", e.NameF, "\n", e.AchName, "\n",
+            e.AchDesc, "\n", e.AchCat, "\n", id);
+
+        if (e.AchName.Length > 0 || e.AchDesc.Length > 0)
+        {
+            var line = string.Concat("获取：", e.AchName.Length > 0 ? "【" + e.AchName + "】" : string.Empty);
+            if (e.AchCat.Length > 0) line += "   " + e.AchCat;
+            if (e.AchPoints > 0) line += string.Concat("   ", e.AchPoints.ToString(), " 点");
+            e.AchievementLine = line;
+        }
+    }
+
+    private bool RefreshUnlocked(bool force = false)
+    {
         unsafe
         {
             var ui = UIState.Instance();
-            if (ui == null) return;
+            if (ui == null) return false;
+
+            var bits = ui->TitleList.UnlockedTitles;
+            if (!force && this.unlockSnapshotValid && bits.SequenceEqual(this.unlockSnapshot))
+                return false;
+
+            bits.CopyTo(this.unlockSnapshot);
+            this.unlockSnapshotValid = true;
+            this.unlockedCount = 0;
 
             foreach (var e in this.all)
             {
@@ -292,13 +336,13 @@ public sealed class LKami9TitleHelper : ModuleBase
                 try { ok = ui->TitleList.IsTitleUnlocked((ushort)e.Id); }
                 catch { ok = false; }
 
-                this.unlocked[e.Id] = ok;
+                e.Unlocked = ok;
                 if (ok) this.unlockedCount++;
             }
         }
-    }
 
-    private bool IsUnlocked(uint id) => this.unlocked.TryGetValue(id, out var v) && v;
+        return true;
+    }
 
     private static string Condense(string s)
     {
@@ -309,6 +353,8 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     private readonly Dictionary<uint, (uint Cur, uint Max)> progress = [];
     private double nextProgressRequest;
+    private readonly Dictionary<ushort, bool> watchedCache = [];
+    private double nextWatchedRefresh;
 
     private unsafe bool TryGetProgress(uint achId, out uint cur, out uint max)
     {
@@ -346,14 +392,27 @@ public sealed class LKami9TitleHelper : ModuleBase
         ach->RequestAchievementProgress(achId);
     }
 
-    private static unsafe bool IsWatched(uint achId)
+    private unsafe bool IsWatched(uint achId)
     {
         if (achId == 0 || achId > ushort.MaxValue) return false;
+
+        var id  = (ushort)achId;
+        var now = ImGui.GetTime();
+        if (now >= this.nextWatchedRefresh)
+        {
+            this.watchedCache.Clear();
+            this.nextWatchedRefresh = now + 5.0;
+        }
+
+        if (this.watchedCache.TryGetValue(id, out var cached)) return cached;
+
         var module = AchievementListModule.Instance();
-        return module != null && module->IsOnWatchlist((ushort)achId);
+        var watched = module != null && module->IsOnWatchlist(id);
+        this.watchedCache[id] = watched;
+        return watched;
     }
 
-    private static unsafe bool ToggleWatch(uint achId)
+    private unsafe bool ToggleWatch(uint achId)
     {
         if (achId == 0 || achId > ushort.MaxValue) return false;
 
@@ -361,10 +420,23 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (module == null) return false;
 
         var id = (ushort)achId;
-        if (module->IsOnWatchlist(id)) { module->RemoveFromWatchlist(id); return false; }
-        if (module->IsWatchlistFull()) return false;
+        if (module->IsOnWatchlist(id))
+        {
+            module->RemoveFromWatchlist(id);
+            this.watchedCache[id] = false;
+            this.status = "已移出成就监视。";
+            return false;
+        }
+
+        if (module->IsWatchlistFull())
+        {
+            this.status = "成就监视已满（上限 30）。";
+            return false;
+        }
 
         module->AddToWatchlist(id);
+        this.watchedCache[id] = true;
+        this.status = "已加入成就监视。";
         return true;
     }
 
@@ -372,14 +444,22 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     private void EquipRandom()
     {
-        var pool = this.all.Where(x => this.IsUnlocked(x.Id) && x.Id != this.lastRandomId).ToList();
-        if (pool.Count == 0)
+        TitleEntry pick = null;
+        var candidates = 0;
+
+        foreach (var e in this.all)
+        {
+            if (!e.Unlocked || e.Id == this.lastRandomId) continue;
+            candidates++;
+            if (Random.Shared.Next(candidates) == 0) pick = e;
+        }
+
+        if (pick == null)
         {
             this.status = "没有可用的已解锁称号。";
             return;
         }
 
-        var pick = pool[Random.Shared.Next(pool.Count)];
         this.lastRandomId = pick.Id;
         this.Equip(pick.Id);
         this.status = string.Format("随机称号：{0}（{1}）", pick.Name, pick.Id);
@@ -399,7 +479,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             }
 
             ui->TitleController.SendTitleIdUpdate((ushort)id);
-            var e = this.all.FirstOrDefault(x => x.Id == id);
+            this.byId.TryGetValue(id, out var e);
             this.lastEquipped = e != null ? $"{e.Name}（{id}）" : id.ToString();
             this.status       = "已佩戴：" + this.lastEquipped;
         }
@@ -416,23 +496,13 @@ public sealed class LKami9TitleHelper : ModuleBase
         var kw = this.search.Trim();
         foreach (var e in this.all)
         {
-            var ok = this.IsUnlocked(e.Id);
+            var ok = e.Unlocked;
 
             if (this.unlockedOnly && !ok) continue;
             if (this.lockedOnly && ok) continue;
             if (this.prefixOnly && !e.IsPrefix) continue;
             if (this.suffixOnly && e.IsPrefix) continue;
-
-            if (kw.Length > 0)
-            {
-                var hit = e.Name.Contains(kw, StringComparison.OrdinalIgnoreCase)
-                       || e.NameF.Contains(kw, StringComparison.OrdinalIgnoreCase)
-                       || e.AchName.Contains(kw, StringComparison.OrdinalIgnoreCase)
-                       || e.AchDesc.Contains(kw, StringComparison.OrdinalIgnoreCase)
-                       || e.AchCat.Contains(kw, StringComparison.OrdinalIgnoreCase)
-                       || e.Id.ToString().Contains(kw, StringComparison.Ordinal);
-                if (!hit) continue;
-            }
+            if (kw.Length > 0 && !e.SearchKey.Contains(kw, StringComparison.OrdinalIgnoreCase)) continue;
 
             if (this.config.CategoryFilter.Length > 0 &&
                 !string.Equals(e.AchCat, this.config.CategoryFilter, StringComparison.Ordinal))
@@ -444,12 +514,33 @@ public sealed class LKami9TitleHelper : ModuleBase
         // 收藏优先，其次按 Order
         this.view.Sort((a, b) =>
         {
-            var fa = this.config.Favorites.Contains(a.Id);
-            var fb = this.config.Favorites.Contains(b.Id);
+            var fa = this.favoriteIds.Contains(a.Id);
+            var fb = this.favoriteIds.Contains(b.Id);
             if (fa != fb) return fa ? -1 : 1;
 
             return this.config.Ascending ? a.Order.CompareTo(b.Order) : b.Order.CompareTo(a.Order);
         });
+    }
+
+    private void RefreshFavoriteCache()
+    {
+        this.favoriteIds.Clear();
+        foreach (var id in this.config.Favorites) this.favoriteIds.Add(id);
+    }
+
+    private void ToggleFavorite(uint id, bool starred)
+    {
+        if (starred)
+        {
+            this.favoriteIds.Remove(id);
+            this.config.Favorites.RemoveAll(x => x == id);
+        }
+        else if (this.favoriteIds.Add(id))
+        {
+            this.config.Favorites.Add(id);
+        }
+
+        this.Rebuild();
     }
 
     private DateTime nextUnlockRefresh = DateTime.MinValue;
@@ -468,9 +559,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             if (ui == null || !ui->TitleList.DataReceived) return;
         }
 
-        var before = this.unlockedCount;
-        this.RefreshUnlocked();
-        if (before != this.unlockedCount) this.Rebuild();
+        if (this.RefreshUnlocked()) this.Rebuild();
     }
 
     #endregion
@@ -591,7 +680,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             ImGui.SetNextWindowSize(OmniTheme.ClampWindowSize(this.expandedSize), ImGuiCond.FirstUseEver);
         }
 
-        var omni = FindOmniMainWindow();
+        var omni = this.config.DockToOmni ? FindOmniMainWindow() : ImGuiWindowPtr.Null;
 
         if (this.config.DockToOmni)
         {
@@ -892,6 +981,9 @@ public sealed class LKami9TitleHelper : ModuleBase
         var pageCount   = Math.Max(1, (this.view.Count + pageSize - 1) / pageSize);
         if (this.page > pageCount) this.page = pageCount;
         if (this.page < 1) this.page = 1;
+        var rowHeight = OmniTheme.Scale(24f);
+        var btnWidth  = OmniTheme.Scale(54f);
+        var rowGap    = OmniTheme.Scale(8f);
 
         using (var listScope = new OmniStyleScope())
         {
@@ -911,7 +1003,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var from = (this.page - 1) * pageSize;
         var to   = Math.Min(this.view.Count, from + pageSize);
         for (var i = from; i < to; i++)
-            this.DrawRow(this.view[i], cText);
+            this.DrawRow(this.view[i], tokens, cText, rowHeight, btnWidth, rowGap);
 
             ImGui.EndChild();
         }
@@ -934,29 +1026,26 @@ public sealed class LKami9TitleHelper : ModuleBase
     }
 
     private void DrawRow(TitleEntry e,
-                         System.Numerics.Vector4 cText)
+                         ThemeTokens tokens,
+                         System.Numerics.Vector4 cText,
+                         float rowHeight,
+                         float btnWidth,
+                         float rowGap)
     {
-        var ok      = this.IsUnlocked(e.Id);
-        var kind    = e.IsPrefix ? "前缀" : "后缀";
-        var starred = this.config.Favorites.Contains(e.Id);
-        var tokens  = OmniTheme.Tokens;
+        var ok      = e.Unlocked;
+        var starred = this.favoriteIds.Contains(e.Id);
 
         ImGui.PushID((int)e.Id);
 
         if (OmniControls.FavoriteButton("###fav", starred, starred ? "取消收藏" : "收藏并置顶"))
-        {
-            if (starred) this.config.Favorites.Remove(e.Id);
-            else         this.config.Favorites.Add(e.Id);
-            this.Rebuild();
-        }
+            this.ToggleFavorite(e.Id, starred);
         ImGui.SameLine();
 
-        var btnWidth = OmniTheme.Scale(54f);
         var rowWidth = MathF.Max(OmniTheme.Scale(120f),
-            ImGui.GetContentRegionAvail().X - btnWidth - OmniTheme.Scale(8f));
-        var label = string.Format("{0}  {1}    ({2} · {3})", ok ? "[已解锁]" : "[未解锁]", e.Name, kind, e.Id);
+            ImGui.GetContentRegionAvail().X - btnWidth - rowGap);
+        var label = ok ? e.LabelUnlocked : e.LabelLocked;
         if (OmniControls.RoundedSelectable(label, this.expanded.Contains(e.Id),
-                ImGuiSelectableFlags.None, new System.Numerics.Vector2(rowWidth, OmniTheme.Scale(24f))))
+                ImGuiSelectableFlags.None, new System.Numerics.Vector2(rowWidth, rowHeight)))
         {
             if (!this.expanded.Remove(e.Id)) this.expanded.Add(e.Id);
         }
@@ -964,25 +1053,52 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (ImGui.IsItemHovered() && ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) && ok)
             this.Equip(e.Id);
 
+        if (ImGui.IsItemHovered() && ImGui.IsMouseClicked(ImGuiMouseButton.Right))
+        {
+            ImGui.SetNextWindowSizeConstraints(
+                new System.Numerics.Vector2(OmniTheme.Scale(156f), 0f),
+                new System.Numerics.Vector2(OmniTheme.Scale(240f), float.MaxValue));
+        }
+
         if (ImGui.BeginPopupContextItem("###ctx"))
         {
-            OmniControls.DrawPopupBackground();
+            using var popupScope = new OmniStyleScope();
+            var panel = PanelColor(tokens);
+            popupScope.Color(ImGuiCol.PopupBg, panel);
+            popupScope.Color(ImGuiCol.Text, cText);
+            popupScope.Color(ImGuiCol.Header, panel);
+            popupScope.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
+            popupScope.Color(ImGuiCol.HeaderActive, panel);
+            popupScope.Var(ImGuiStyleVar.ItemSpacing,
+                OmniTheme.Scale(new System.Numerics.Vector2(8f, 3f)));
+
+            var popupPos    = ImGui.GetWindowPos();
+            var popupSize   = ImGui.GetWindowSize();
+            var popupRadius = OmniTheme.Scale(tokens.BorderRadius);
+            var popupDraw   = ImGui.GetWindowDrawList();
+            popupDraw.AddRectFilled(popupPos, popupPos + popupSize,
+                ImGui.GetColorU32(Opaque(panel)), popupRadius);
+            popupDraw.AddRect(popupPos, popupPos + popupSize,
+                ImGui.GetColorU32(tokens.Border), popupRadius,
+                ImDrawFlags.None, OmniTheme.BorderThickness());
+
+            var popupPad = OmniTheme.Scale(8f);
+            ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(3f)));
+            ImGui.Indent(popupPad);
 
             if (ok && OmniControls.RoundedMenuItem("佩戴")) this.Equip(e.Id);
             if (e.AchId is > 0 and <= ushort.MaxValue)
             {
                 var watched = IsWatched(e.AchId);
                 if (OmniControls.RoundedMenuItem(watched ? "移出成就监视" : "加入成就监视"))
-                    ToggleWatch(e.AchId);
+                    this.ToggleWatch(e.AchId);
             }
             if (OmniControls.RoundedMenuItem("复制称号名")) ImGui.SetClipboardText(e.Name);
             if (OmniControls.RoundedMenuItem(starred ? "取消收藏" : "收藏"))
-            {
-                if (starred) this.config.Favorites.Remove(e.Id);
-                else         this.config.Favorites.Add(e.Id);
-                this.Rebuild();
-            }
+                this.ToggleFavorite(e.Id, starred);
 
+            ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(3f)));
+            ImGui.Unindent(popupPad);
             ImGui.EndPopup();
         }
 
@@ -990,22 +1106,19 @@ public sealed class LKami9TitleHelper : ModuleBase
         {
             ImGui.SameLine();
             if (OmniControls.SmallButton("佩戴", false,
-                    new System.Numerics.Vector2(btnWidth, OmniTheme.Scale(22f))))
+                    new System.Numerics.Vector2(btnWidth, MathF.Min(rowHeight, OmniTheme.Scale(22f)))))
                 this.Equip(e.Id);
         }
 
-        var showDetail = this.expanded.Contains(e.Id) || !ok;
+        var showDetail = this.expanded.Contains(e.Id) ||
+                         (this.config.AutoExpandLocked && !ok);
         if (showDetail)
         {
             ImGui.Indent(OmniTheme.Scale(26f));
 
             if (e.AchName.Length > 0 || e.AchDesc.Length > 0)
             {
-                var line = "获取：";
-                if (e.AchName.Length > 0) line += "【" + e.AchName + "】";
-                if (e.AchCat.Length  > 0) line += "   " + e.AchCat;
-                if (e.AchPoints      > 0) line += string.Format("   {0} 点", e.AchPoints);
-                ImGui.TextColored(cText, line);
+                ImGui.TextColored(cText, e.AchievementLine);
 
                 if (e.AchDesc.Length > 0) WrappedTextColored(cText, e.AchDesc);
             }
@@ -1029,7 +1142,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                     this.RequestProgress(e.AchId);
                 }
 
-                if (IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cText, "· 已监视"); }
+                if (this.IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cText, "· 已监视"); }
             }
 
             ImGui.Unindent(OmniTheme.Scale(26f));
@@ -1105,6 +1218,13 @@ public sealed class LKami9TitleHelper : ModuleBase
         var dock = this.config.DockToOmni;
         if (OmniControls.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
 
+        var autoExpand = this.config.AutoExpandLocked;
+        if (OmniControls.Checkbox("默认展开未解锁称号", ref autoExpand))
+        {
+            this.config.AutoExpandLocked = autoExpand;
+            changed = true;
+        }
+
         var pageSize = this.config.PageSize;
         ImGui.SetNextItemWidth(OmniTheme.Scale(160f));
         if (ImGui.InputInt("每页条数", ref pageSize, 20, 100))
@@ -1162,6 +1282,7 @@ public sealed class LKami9TitleHelperConfig
     public bool Ascending  { get; set; } = true;
     public bool ScanOnOpen { get; set; } = true;
     public bool DockToOmni { get; set; } = false;
+    public bool AutoExpandLocked { get; set; }
     public int  ConfigVersion { get; set; }
     public int  PageSize   { get; set; } = 40;
     public string CategoryFilter { get; set; } = string.Empty;

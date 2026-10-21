@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "全部文字统一使用 Omni 正文色；称号列表的每一行、选中行和列表空白区域统一铺同一块深色底板。",
-      "Version": "2.10.0",
+      "Description": "性能优化：未解锁详情默认收起，解锁状态仅在变化时刷新，缓存行文字与成就监视状态；右键菜单改为 Omni 深色弹层。",
+      "Version": "2.11.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "43CE6BA62E24A4280CE6222528A135DA02C2BFB3EEE6B82A3A6A9388C121690C"
+      "Sha256": "1672B9F099F7EB71AD9B8C1B419BE0E54171DA4B528844FAFC48AE4CBC5C3522"
     }
   ]
 }
