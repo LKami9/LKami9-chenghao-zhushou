@@ -922,9 +922,8 @@ public sealed class LKami9TitleHelper : ModuleBase
     /// <summary>面板色：比主题背景略深一档，用来做背景板，避免整片同色发亮。</summary>
     private static System.Numerics.Vector4 PanelColor(OmniToolbox.UI.Theme.ThemeTokens t)
     {
-        var bg   = t.Background;
-        var dark = new System.Numerics.Vector4(bg.X * 0.90f, bg.Y * 0.90f, bg.Z * 0.88f, 1f);
-        return System.Numerics.Vector4.Lerp(dark, System.Numerics.Vector4.One, 0.06f);
+        // 取「背景」与「表面」的中点：既不与窗口同色发亮，也不会显脏
+        return System.Numerics.Vector4.Lerp(Opaque(t.Background), Opaque(t.Surface), 0.5f);
     }
 
     private void DrawRow(TitleEntry e,
@@ -1055,9 +1054,12 @@ public sealed class LKami9TitleHelper : ModuleBase
         panelScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
         panelScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 
-        ImGui.BeginChild("###LKami9TitleSettingsPanel",
-            new System.Numerics.Vector2(0f, MathF.Max(OmniTheme.Scale(140f), ImGui.GetContentRegionAvail().Y)),
-            true, ImGuiWindowFlags.None);
+        panelScope.Var(ImGuiStyleVar.WindowPadding, OmniTheme.Scale(new System.Numerics.Vector2(10f, 8f)));
+
+        // 尺寸给 (0,0) = 按内容自适应；同时禁掉滚动条，面板不再是"带滚动条的大框"
+        ImGui.BeginChild("###LKami9TitleSettingsPanel", System.Numerics.Vector2.Zero, true,
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse |
+            ImGuiWindowFlags.AlwaysAutoResize);
 
         ImGui.TextColored(cAccent, "LKami9 称号助手");
         WrappedTextColored(cText,
