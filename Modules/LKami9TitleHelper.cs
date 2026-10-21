@@ -902,6 +902,11 @@ public sealed class LKami9TitleHelper : ModuleBase
         {
             listScope.Color(ImGuiCol.ChildBg, panel);
             listScope.Color(ImGuiCol.Border, tokens.Border);
+            // 行本身（RoundedSelectable）用的是 Header 色，这里也换成底板色，
+            // 否则每行会自带一层亮色背景，看起来就是"中间白、两边深"
+            listScope.Color(ImGuiCol.Header, panel);
+            listScope.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
+            listScope.Color(ImGuiCol.HeaderActive, OmniTheme.ActiveBackground);
             listScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
             listScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 

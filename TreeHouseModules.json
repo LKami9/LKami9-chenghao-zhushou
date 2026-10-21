@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "还原 v2.6.0 的底板颜色（确认观感正确），保留 v2.7 的铺满覆盖：设置页全区域 + 独立窗口称号列表整块。",
-      "Version": "2.7.1",
+      "Description": "称号列表整块铺底板色：行背景(Header)也改为底板色，不再出现中间亮、两边深。",
+      "Version": "2.8.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "75BB0BE196A31675514DEC69CF02950DA321D8AB580584B92FCF728E7D5E8AE8"
+      "Sha256": "4F0F4EC194B8E35C4E8C826F703D07E8756668CDD811DFC3D346BF105CE3CC81"
     }
   ]
 }
