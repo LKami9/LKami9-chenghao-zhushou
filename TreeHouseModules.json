@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "性能优化：未解锁详情默认收起，解锁状态仅在变化时刷新，缓存行文字与成就监视状态；右键菜单改为 Omni 深色弹层。",
-      "Version": "2.11.0",
+      "Description": "设置页改为宿主设置页内的平面直排，不再使用独立底板和子窗口；按钮、开关、状态与命令列表连续显示。",
+      "Version": "2.11.1",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "1672B9F099F7EB71AD9B8C1B419BE0E54171DA4B528844FAFC48AE4CBC5C3522"
+      "Sha256": "F97D0C623889FC35144338F3CA6FBAE09A0E14C3F4006C08D35BF22FD8DDD508"
     }
   ]
 }

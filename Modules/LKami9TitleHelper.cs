@@ -1159,67 +1159,30 @@ public sealed class LKami9TitleHelper : ModuleBase
 
     public override bool DrawSettings()
     {
-        var tokens  = OmniTheme.Tokens;
-        var panel   = PanelColor(tokens);
-        var cText   = Opaque(tokens.Text);
-
-        // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼。
-        // 走 OmniStyleScope（自计数 + using），即使中途异常也必定弹回。
-        using var panelScope = new OmniStyleScope();
-        panelScope.Color(ImGuiCol.ChildBg, System.Numerics.Vector4.Zero);
-        panelScope.Color(ImGuiCol.Border, tokens.Border);
-        panelScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
-        panelScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
-
-        panelScope.Var(ImGuiStyleVar.WindowPadding, OmniTheme.Scale(new System.Numerics.Vector2(10f, 8f)));
-
-        // 宿主会在 DrawSettings() 返回后继续绘制命令列表。底板必须先铺到当前内容区的
-        // 完整范围，并让这里的子窗口保持透明，命令文字才会落在同一块板上。
-        var panelPos  = ImGui.GetCursorScreenPos();
-        var available = ImGui.GetContentRegionAvail();
-        var panelSize = new System.Numerics.Vector2(
-            MathF.Max(1f, available.X),
-            MathF.Max(OmniTheme.Scale(160f), available.Y));
-        var panelRadius = OmniTheme.Scale(tokens.BorderRadius);
-        var draw        = ImGui.GetWindowDrawList();
-
-        draw.AddRectFilled(panelPos, panelPos + panelSize,
-            ImGui.GetColorU32(Opaque(panel)), panelRadius);
-        draw.AddRect(panelPos, panelPos + panelSize,
-            ImGui.GetColorU32(tokens.Border), panelRadius,
-            ImDrawFlags.None, OmniTheme.BorderThickness());
-
-        // 透明子窗口负责布局与控件，底板和边框由父窗口 DrawList 统一覆盖命令区。
-        ImGui.BeginChild("###LKami9TitleSettingsPanel",
-            new System.Numerics.Vector2(0f, panelSize.Y),
-            false,
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
-
-        ImGui.TextColored(cText, "LKami9 称号助手");
-        WrappedTextColored(cText,
-            "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
+        ImGui.TextUnformatted("LKami9 称号助手");
+        ImGui.TextDisabled("主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
         var changed = false;
 
         ImGui.Spacing();
-        if (OmniControls.SmallButton(this.config.WindowOpen ? "关闭窗口" : "打开窗口", false))
+        if (ImGui.Button(this.config.WindowOpen ? "关闭窗口" : "打开窗口"))
         {
             this.ToggleWindow(!this.config.WindowOpen);
             changed = true;
         }
 
         ImGui.SameLine();
-        if (OmniControls.SmallButton("重新扫描", false)) this.Build();
+        if (ImGui.Button("重新扫描")) this.Build();
 
         ImGui.Spacing();
         var scan = this.config.ScanOnOpen;
-        if (OmniControls.Checkbox("启用时自动扫描称号", ref scan)) { this.config.ScanOnOpen = scan; changed = true; }
+        if (ImGui.Checkbox("启用时自动扫描称号", ref scan)) { this.config.ScanOnOpen = scan; changed = true; }
 
         var dock = this.config.DockToOmni;
-        if (OmniControls.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
+        if (ImGui.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
 
         var autoExpand = this.config.AutoExpandLocked;
-        if (OmniControls.Checkbox("默认展开未解锁称号", ref autoExpand))
+        if (ImGui.Checkbox("默认展开未解锁称号", ref autoExpand))
         {
             this.config.AutoExpandLocked = autoExpand;
             changed = true;
@@ -1235,9 +1198,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.Spacing();
-        ImGui.TextColored(cText, this.status);
-
-        ImGui.EndChild();
+        ImGui.TextDisabled(this.status);
 
         // 按官方规范：只有配置真的变了才返回 true，让宿主保存
         return changed;
