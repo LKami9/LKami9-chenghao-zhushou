@@ -375,8 +375,11 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         OmniWindowChrome.SetNextWindowPosition(WindowId);
 
-        PushOmniWindowStyle();
+        var pushedColors = 0;
+        var pushedVars = 0;
+        PushOmniWindowStyle(ref pushedColors, ref pushedVars);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, System.Numerics.Vector2.Zero);
+        pushedVars++;
 
         try
         {
@@ -441,8 +444,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
         finally
         {
-            ImGui.PopStyleVar();
-            PopOmniWindowStyle();
+            if (pushedVars > 0) ImGui.PopStyleVar(pushedVars);
+            if (pushedColors > 0) ImGui.PopStyleColor(pushedColors);
         }
 
         if (!open) this.config.WindowOpen = false;
@@ -640,61 +643,56 @@ public sealed class LKami9TitleHelper : ModuleBase
         return fg;
     }
 
-    private static void PushOmniWindowStyle()
+    private static void PushOmniWindowStyle(ref int colors, ref int vars)
     {
         var tokens         = OmniTheme.Tokens;
         var textDisabled   = tokens.Text with { W = tokens.Text.W * 0.55f };
         var titleBackground = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Primary, 0.35f);
         var titleActive     = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Accent,  0.65f);
 
-        ImGui.PushStyleColor(ImGuiCol.WindowBg, tokens.Background with { W = 1f });
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, new System.Numerics.Vector4(tokens.Background.X, tokens.Background.Y, tokens.Background.Z, 1f));
-        ImGui.PushStyleColor(ImGuiCol.PopupBg, tokens.Background with { W = 1f });
-        ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border);
-        ImGui.PushStyleColor(ImGuiCol.Text, tokens.Text);
-        ImGui.PushStyleColor(ImGuiCol.TextDisabled, textDisabled);
-        ImGui.PushStyleColor(ImGuiCol.Button, tokens.Surface);
-        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.ButtonActive, OmniTheme.ActiveBackground);
-        ImGui.PushStyleColor(ImGuiCol.Header, tokens.Surface);
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, tokens.Accent);
-        ImGui.PushStyleColor(ImGuiCol.FrameBg, tokens.Surface);
-        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, OmniTheme.ActiveBackground);
-        ImGui.PushStyleColor(ImGuiCol.Tab, tokens.Surface);
-        ImGui.PushStyleColor(ImGuiCol.TabHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.TabActive, tokens.Accent);
-        ImGui.PushStyleColor(ImGuiCol.TitleBg, titleBackground);
-        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, titleActive);
-        ImGui.PushStyleColor(ImGuiCol.TitleBgCollapsed, titleBackground);
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, tokens.Background);
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, tokens.Secondary);
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, tokens.Accent);
-        ImGui.PushStyleColor(ImGuiCol.CheckMark, tokens.Success);
-        ImGui.PushStyleColor(ImGuiCol.SliderGrab, tokens.Secondary);
-        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, tokens.Accent);
-        ImGui.PushStyleColor(ImGuiCol.Separator, tokens.Border);
-        ImGui.PushStyleColor(ImGuiCol.ResizeGrip, tokens.Surface);
-        ImGui.PushStyleColor(ImGuiCol.ResizeGripHovered, OmniTheme.HoverBackground);
-        ImGui.PushStyleColor(ImGuiCol.ResizeGripActive, tokens.Accent);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, tokens.Background with { W = 1f }); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new System.Numerics.Vector4(tokens.Background.X, tokens.Background.Y, tokens.Background.Z, 1f)); colors++;
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, tokens.Background with { W = 1f }); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Border, tokens.Border); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Text, tokens.Text); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TextDisabled, textDisabled); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Button, tokens.Surface); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ButtonHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ButtonActive, OmniTheme.ActiveBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Header, tokens.Surface); colors++;
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, tokens.Accent); colors++;
+        ImGui.PushStyleColor(ImGuiCol.FrameBg, tokens.Surface); colors++;
+        ImGui.PushStyleColor(ImGuiCol.FrameBgHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.FrameBgActive, OmniTheme.ActiveBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Tab, tokens.Surface); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TabHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TabActive, tokens.Accent); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TitleBg, titleBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, titleActive); colors++;
+        ImGui.PushStyleColor(ImGuiCol.TitleBgCollapsed, titleBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarBg, tokens.Background); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrab, tokens.Secondary); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ScrollbarGrabActive, tokens.Accent); colors++;
+        ImGui.PushStyleColor(ImGuiCol.CheckMark, tokens.Success); colors++;
+        ImGui.PushStyleColor(ImGuiCol.SliderGrab, tokens.Secondary); colors++;
+        ImGui.PushStyleColor(ImGuiCol.SliderGrabActive, tokens.Accent); colors++;
+        ImGui.PushStyleColor(ImGuiCol.Separator, tokens.Border); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ResizeGrip, tokens.Surface); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ResizeGripHovered, OmniTheme.HoverBackground); colors++;
+        ImGui.PushStyleColor(ImGuiCol.ResizeGripActive, tokens.Accent); colors++;
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, OmniTheme.PopupPadding());
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, OmniTheme.Scale(tokens.BorderRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, OmniTheme.BorderThickness());
-        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, OmniTheme.Scale(tokens.ButtonRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(tokens.BorderRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(tokens.ButtonRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(tokens.ButtonRadius));
-        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f)));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, OmniTheme.PopupPadding()); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, OmniTheme.Scale(tokens.BorderRadius)); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowBorderSize, OmniTheme.BorderThickness()); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.FrameRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(tokens.BorderRadius)); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(tokens.ButtonRadius)); vars++;
+        ImGui.PushStyleVar(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f))); vars++;
     }
 
-    private static void PopOmniWindowStyle()
-    {
-        ImGui.PopStyleVar(8);
-        ImGui.PopStyleColor(32);
-    }
 
     #endregion
 }
