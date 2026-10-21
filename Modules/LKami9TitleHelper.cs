@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 
 using Dalamud.Bindings.ImGui;
+using Dalamud.Game.Command;
 using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
@@ -46,11 +47,10 @@ public sealed class LKami9TitleHelper : ModuleBase
         Author      = "LKami9",
         Commands =
         [
-            new("打开 / 关闭窗口", "/omni LKami9TitleHelper window"),
-            new("重新扫描称号",   "/omni LKami9TitleHelper refresh"),
-            new("按关键词搜索",   "/omni LKami9TitleHelper search 关键字"),
-            new("按 ID 佩戴称号", "/omni LKami9TitleHelper equip 123"),
-            new("随机佩戴已解锁称号", "/omni LKami9TitleHelper random"),
+            new("打开 / 关闭窗口", "/L9CHH"),
+            new("按关键词搜索",   "/L9CHH search 关键字"),
+            new("按 ID 佩戴称号", "/L9CHH equip 123"),
+            new("随机佩戴已解锁称号", "/L9CHH random"),
         ],
     };
 
@@ -59,6 +59,9 @@ public sealed class LKami9TitleHelper : ModuleBase
     private const string WindowId      = "###LKami9TitleMainWindow";
     private const string CollapseId    = "###LKami9TitleCollapse";
     private const string CloseId       = "###LKami9TitleClose";
+    private const string ShortCommand  = "/L9CHH";
+    private ICommandManager shortCommandManager;
+    private bool shortCommandRegistered;
 
 
     private LKami9TitleHelperConfig config = new();
@@ -76,8 +79,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         public byte   AchPoints;
         public uint   AchId;
         public bool   Unlocked;
-        public string LabelLocked     = string.Empty;
-        public string LabelUnlocked   = string.Empty;
+        public string Label           = string.Empty;
         public string AchievementLine = string.Empty;
         public string SearchKey       = string.Empty;
     }
@@ -120,15 +122,55 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         this.MigrateConfig();
         this.RefreshFavoriteCache();
+        this.RegisterShortCommand();
 
-        if (this.config.ScanOnOpen || !this.built) this.Build();
+        if (this.config.WindowOpen) this.EnsureDataReady();
     }
 
     protected override void OnDisable()
     {
+        this.UnregisterShortCommand();
         DalamudServices.PluginInterface.UiBuilder.Draw -= this.DrawWindow;
         DalamudServices.Framework.Update                -= this.OnFrameworkUpdate;
     }
+
+    private void RegisterShortCommand()
+    {
+        try
+        {
+            this.shortCommandManager =
+                DalamudServices.PluginInterface.GetService(typeof(ICommandManager)) as ICommandManager;
+            if (this.shortCommandManager == null)
+            {
+                this.status = "/L9CHH 注册失败：找不到命令服务。";
+                return;
+            }
+
+            this.shortCommandRegistered = this.shortCommandManager.AddHandler(
+                ShortCommand,
+                new CommandInfo(this.OnShortCommand)
+                {
+                    HelpMessage = "LKami9 称号助手：/L9CHH [search 关键词|equip ID|random]",
+                });
+        }
+        catch (Exception ex)
+        {
+            this.shortCommandRegistered = false;
+            DalamudServices.PluginLog.Warning(ex, "[LKami9TitleHelper] register /L9CHH failed");
+        }
+    }
+
+    private void UnregisterShortCommand()
+    {
+        if (!this.shortCommandRegistered) return;
+        try { this.shortCommandManager?.RemoveHandler(ShortCommand); }
+        catch { }
+        this.shortCommandRegistered = false;
+        this.shortCommandManager = null;
+    }
+
+    private void OnShortCommand(string command, string arguments) =>
+        this.TryHandleCommand(arguments);
 
     public override bool ResetSettings()
     {
@@ -137,6 +179,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.config.ScanOnOpen = true;
         this.config.DockToOmni = true;
         this.config.AutoExpandLocked = false;
+        this.config.PageSize = 100;
         this.collapsed         = false;
         this.resizePending     = true;
         return true;
@@ -158,11 +201,12 @@ public sealed class LKami9TitleHelper : ModuleBase
                 return true;
 
             case "refresh":
-                this.Build();
+                this.EnsureDataReady(force: true);
                 this.ToggleWindow(true);
                 return true;
 
             case "search":
+                this.EnsureDataReady();
                 this.search = arg;
                 this.Rebuild();
                 this.ToggleWindow(true);
@@ -175,7 +219,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                 return true;
 
             case "equip":
-                if (!uint.TryParse(arg, out var id)) { this.status = "用法：/omni LKami9TitleHelper equip <称号ID>"; return true; }
+                if (!uint.TryParse(arg, out var id)) { this.status = "用法：/L9CHH equip <称号ID>"; return true; }
                 this.Equip(id);
                 return true;
 
@@ -184,10 +228,10 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
     }
 
-    /// <summary>旧配置迁移：v2.3 起默认自由拖动；v2.11 起默认收起未解锁详情。</summary>
+    /// <summary>旧配置迁移：v2.3 起默认自由拖动；v2.12 起每页 100 条并自动扫描。</summary>
     private void MigrateConfig()
     {
-        if (this.config.ConfigVersion >= 3) return;
+        if (this.config.ConfigVersion >= 4) return;
 
         if (this.config.ConfigVersion < 2)
         {
@@ -195,14 +239,23 @@ public sealed class LKami9TitleHelper : ModuleBase
             if (this.config.PageSize > 60) this.config.PageSize = 40;
         }
 
+        this.config.ScanOnOpen       = true;
         this.config.AutoExpandLocked = false;
-        this.config.ConfigVersion = 3;
+        this.config.PageSize         = 100;
+        this.config.ConfigVersion    = 4;
     }
 
     private void ToggleWindow(bool open)
     {
+        if (open) this.EnsureDataReady();
         this.config.WindowOpen = open;
         if (open && this.collapsed) { this.collapsed = false; this.resizePending = true; }
+    }
+
+    private void EnsureDataReady(bool force = false)
+    {
+        if (force || !this.built) this.Build();
+        else this.RefreshUnlocked();
     }
 
     #endregion
@@ -301,9 +354,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         var id   = e.Id.ToString();
         var tail = string.Concat("    (", kind, " · ", id, ")");
 
-        e.LabelLocked   = string.Concat("[未解锁]  ", e.Name, tail);
-        e.LabelUnlocked = string.Concat("[已解锁]  ", e.Name, tail);
-        e.SearchKey     = string.Concat(e.Name, "\n", e.NameF, "\n", e.AchName, "\n",
+        e.Label     = string.Concat(e.Name, tail);
+        e.SearchKey = string.Concat(e.Name, "\n", e.NameF, "\n", e.AchName, "\n",
             e.AchDesc, "\n", e.AchCat, "\n", id);
 
         if (e.AchName.Length > 0 || e.AchDesc.Length > 0)
@@ -927,9 +979,6 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.SameLine();
-        if (OmniControls.SmallButton("刷新", false)) this.Build();
-
-        ImGui.SameLine();
         ImGui.BeginDisabled(this.search.Length == 0 && this.config.CategoryFilter.Length == 0);
         if (OmniControls.SmallButton("清空", false))
         {
@@ -981,9 +1030,9 @@ public sealed class LKami9TitleHelper : ModuleBase
         var pageCount   = Math.Max(1, (this.view.Count + pageSize - 1) / pageSize);
         if (this.page > pageCount) this.page = pageCount;
         if (this.page < 1) this.page = 1;
-        var rowHeight = OmniTheme.Scale(24f);
-        var btnWidth  = OmniTheme.Scale(54f);
-        var rowGap    = OmniTheme.Scale(8f);
+        var rowHeight     = OmniTheme.Scale(24f);
+        var btnWidth      = OmniTheme.Scale(54f);
+        var favoriteWidth = OmniControls.FavoriteButtonSize().X;
 
         using (var listScope = new OmniStyleScope())
         {
@@ -994,6 +1043,9 @@ public sealed class LKami9TitleHelper : ModuleBase
             listScope.Color(ImGuiCol.Header, panel);
             listScope.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
             listScope.Color(ImGuiCol.HeaderActive, panel);
+            listScope.Color(ImGuiCol.TableRowBg, panel);
+            listScope.Color(ImGuiCol.TableRowBgAlt, panel);
+            listScope.Color(ImGuiCol.TableHeaderBg, panel);
             listScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
             listScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 
@@ -1002,8 +1054,24 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         var from = (this.page - 1) * pageSize;
         var to   = Math.Min(this.view.Count, from + pageSize);
-        for (var i = from; i < to; i++)
-            this.DrawRow(this.view[i], tokens, cText, rowHeight, btnWidth, rowGap);
+        if (ImGui.BeginTable(
+                "###LKami9TitleGrid",
+                3,
+                ImGuiTableFlags.SizingStretchSame |
+                ImGuiTableFlags.RowBg |
+                ImGuiTableFlags.BordersInnerV))
+        {
+            var column = 0;
+            for (var i = from; i < to; i++)
+            {
+                if (column == 0) ImGui.TableNextRow();
+                ImGui.TableNextColumn();
+                this.DrawRow(this.view[i], tokens, cText, rowHeight, btnWidth, favoriteWidth);
+                column = (column + 1) % 3;
+            }
+
+            ImGui.EndTable();
+        }
 
             ImGui.EndChild();
         }
@@ -1030,21 +1098,18 @@ public sealed class LKami9TitleHelper : ModuleBase
                          System.Numerics.Vector4 cText,
                          float rowHeight,
                          float btnWidth,
-                         float rowGap)
+                         float favoriteWidth)
     {
         var ok      = e.Unlocked;
         var starred = this.favoriteIds.Contains(e.Id);
 
         ImGui.PushID((int)e.Id);
 
-        if (OmniControls.FavoriteButton("###fav", starred, starred ? "取消收藏" : "收藏并置顶"))
-            this.ToggleFavorite(e.Id, starred);
-        ImGui.SameLine();
-
-        var rowWidth = MathF.Max(OmniTheme.Scale(120f),
-            ImGui.GetContentRegionAvail().X - btnWidth - rowGap);
-        var label = ok ? e.LabelUnlocked : e.LabelLocked;
-        if (OmniControls.RoundedSelectable(label, this.expanded.Contains(e.Id),
+        var spacing   = ImGui.GetStyle().ItemSpacing.X;
+        var actionGap = spacing * (ok ? 2f : 1f);
+        var rowWidth  = MathF.Max(OmniTheme.Scale(56f),
+            ImGui.GetContentRegionAvail().X - favoriteWidth - (ok ? btnWidth : 0f) - actionGap);
+        if (OmniControls.RoundedSelectable(e.Label, this.expanded.Contains(e.Id),
                 ImGuiSelectableFlags.None, new System.Numerics.Vector2(rowWidth, rowHeight)))
         {
             if (!this.expanded.Remove(e.Id)) this.expanded.Add(e.Id);
@@ -1102,6 +1167,10 @@ public sealed class LKami9TitleHelper : ModuleBase
             ImGui.EndPopup();
         }
 
+        ImGui.SameLine();
+        if (OmniControls.FavoriteButton("###fav", starred, starred ? "取消收藏" : "收藏并置顶"))
+            this.ToggleFavorite(e.Id, starred);
+
         if (ok)
         {
             ImGui.SameLine();
@@ -1148,7 +1217,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             ImGui.Unindent(OmniTheme.Scale(26f));
         }
 
-        DrawThemedRule(tokens.Border);
+        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(4f)));
         ImGui.PopID();
     }
 
@@ -1171,13 +1240,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             changed = true;
         }
 
-        ImGui.SameLine();
-        if (ImGui.Button("重新扫描")) this.Build();
-
         ImGui.Spacing();
-        var scan = this.config.ScanOnOpen;
-        if (ImGui.Checkbox("启用时自动扫描称号", ref scan)) { this.config.ScanOnOpen = scan; changed = true; }
-
         var dock = this.config.DockToOmni;
         if (ImGui.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
 
@@ -1245,7 +1308,7 @@ public sealed class LKami9TitleHelperConfig
     public bool DockToOmni { get; set; } = false;
     public bool AutoExpandLocked { get; set; }
     public int  ConfigVersion { get; set; }
-    public int  PageSize   { get; set; } = 40;
+    public int  PageSize   { get; set; } = 100;
     public string CategoryFilter { get; set; } = string.Empty;
     public List<uint> Favorites { get; set; } = [];
 }

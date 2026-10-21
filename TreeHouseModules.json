@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "设置页改为宿主设置页内的平面直排，不再使用独立底板和子窗口；按钮、开关、状态与命令列表连续显示。",
-      "Version": "2.11.1",
+      "Description": "新增短命令 /L9CHH；默认每页 100 条并在打开窗口时自动扫描；称号列表改为三列紧凑布局，收藏与佩戴按钮并排，移除解锁状态前缀。",
+      "Version": "2.12.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "F97D0C623889FC35144338F3CA6FBAE09A0E14C3F4006C08D35BF22FD8DDD508"
+      "Sha256": "FF2CFDB1C51F3D0903F84A6A8BA5A8A5B34CB281A2C6CD7C74027A903511DA26"
     }
   ]
 }
