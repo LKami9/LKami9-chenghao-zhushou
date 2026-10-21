@@ -125,6 +125,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.MigrateConfig();
         this.RefreshFavoriteCache();
         this.RegisterShortCommand();
+        DalamudServices.PluginLog.Information(
+            $"[LKami9TitleHelper] enabled 2.12.3: windowOpen={this.config.WindowOpen}, shortCommand={this.shortCommandRegistered}");
 
         if (this.config.WindowOpen) this.EnsureDataReady();
     }
@@ -381,9 +383,12 @@ public sealed class LKami9TitleHelper : ModuleBase
             var ui = UIState.Instance();
             if (ui == null) return false;
 
-            this.titleDataObserved = ui->TitleList.DataReceived;
+            var received = ui->TitleList.DataReceived;
+            force = force || (received && !this.titleDataObserved);
+            this.titleDataObserved = received;
             var bits = ui->TitleList.UnlockedTitles;
-            if (!force && this.unlockSnapshotValid && bits.SequenceEqual(this.unlockSnapshot))
+            if (!force && this.titleDataObserved &&
+                this.unlockSnapshotValid && bits.SequenceEqual(this.unlockSnapshot))
                 return false;
 
             bits.CopyTo(this.unlockSnapshot);
@@ -638,6 +643,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         {
             this.Rebuild();
             this.UpdateLoadedStatus();
+        DalamudServices.PluginLog.Information(
+            $"[LKami9TitleHelper] build complete: titles={this.all.Count}, unlocked={this.unlockedCount}, dataReceived={this.titleDataObserved}");
         }
     }
 
