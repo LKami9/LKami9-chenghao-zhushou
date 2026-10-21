@@ -516,7 +516,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var y     = pos.Y + OmniTheme.Scale(1f);
         ImGui.GetWindowDrawList().AddLine(pos with { Y = y }, new System.Numerics.Vector2(pos.X + width, y),
             ImGui.GetColorU32(color));
-        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(6f)));
+        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.ContentGap()));
     }
 
     private static void WrappedTextColored(System.Numerics.Vector4 color, string text)
@@ -602,6 +602,9 @@ public sealed class LKami9TitleHelper : ModuleBase
             var radius    = OmniTheme.Scale(tokens.BorderRadius);
             var draw = ImGui.GetWindowDrawList();
 
+            draw.AddRectFilled(framePos, framePos + frameSize,
+                ImGui.GetColorU32(Opaque(tokens.Background)), radius);
+
             var chrome = OmniWindowChrome.Draw(
                 framePos, frameSize, this.collapsed,
                 "LKami9 称号助手", CollapseId, CloseId, true);
@@ -640,7 +643,8 @@ public sealed class LKami9TitleHelper : ModuleBase
                     var panel = Opaque(tokens.Background);
 
                     ImGui.SetCursorScreenPos(contentPos);
-                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
+                    ImGui.BeginChild("###LKami9TitleContent", contentSize, false,
+                        ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
                     FillCurrentWindow(panel, radius);
                     this.DrawContent();
                     ImGui.EndChild();
@@ -743,13 +747,14 @@ public sealed class LKami9TitleHelper : ModuleBase
         style.Var(ImGuiStyleVar.PopupRounding, OmniTheme.Scale(t.BorderRadius));
         style.Var(ImGuiStyleVar.ScrollbarRounding, OmniTheme.Scale(t.ButtonRadius));
         style.Var(ImGuiStyleVar.GrabRounding, OmniTheme.Scale(t.ButtonRadius));
-        style.Var(ImGuiStyleVar.FramePadding, OmniTheme.Scale(new System.Numerics.Vector2(6f, 4f)));
+        style.Var(ImGuiStyleVar.FramePadding, OmniTheme.Scale(t.FramePadding));
+        style.Var(ImGuiStyleVar.ItemSpacing, OmniTheme.Scale(t.ItemSpacing));
     }
 
     private void DrawContent()
     {
         var tokens  = OmniTheme.Tokens;
-        var pad     = OmniTheme.Scale(12f);
+        var pad     = MathF.Max(OmniTheme.Scale(8f), OmniTheme.WindowInset());
         var back    = Opaque(tokens.Background);
         var panel   = Opaque(tokens.Background);
         var cText   = Opaque(tokens.Text);
@@ -757,7 +762,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var cAccent = Opaque(tokens.Accent);
         var cOk     = Opaque(tokens.Success);
 
-        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.Scale(6f)));
+        ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.ContentGap()));
         ImGui.Indent(pad);
 
         // 工具条：搜索 + 分类（Omni 控件）
@@ -843,8 +848,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (this.page > pageCount) this.page = pageCount;
         if (this.page < 1) this.page = 1;
 
-        ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false,
-            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
+        ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false, ImGuiWindowFlags.None);
         FillCurrentWindow(panel, OmniTheme.Scale(tokens.BorderRadius));
 
         var from = (this.page - 1) * pageSize;

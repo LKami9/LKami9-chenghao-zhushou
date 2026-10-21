@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "Omni 外观版：Omni 字体+主题配色（含滚动条）。窗口默认自由拖动（贴靠可选）、列表去掉滚动条改分页、修复缺字形导致的“=”方块。",
-      "Version": "2.2.0",
+      "Description": "保留列表滚动条、去掉外层大滚动条；内边距/间距/输入框留白全部改用 Omni 主题值（t.WindowPadding/t.FramePadding/t.ItemSpacing/WindowInset/ContentGap）。",
+      "Version": "2.2.1",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "ACCD83D716D28E45F8817A0930433A5FF136D91F053B073A8CD406567D5DBA6A"
+      "Sha256": "C85E08B3ED9FD5BA574FE8E76AB0124C8E867509672882069542B41AE248CB80"
     }
   ]
 }
