@@ -930,10 +930,8 @@ public sealed class LKami9TitleHelper : ModuleBase
     /// <summary>面板色：比主题背景略深一档，用来做背景板，避免整片同色发亮。</summary>
     private static System.Numerics.Vector4 PanelColor(OmniToolbox.UI.Theme.ThemeTokens t)
     {
-        // 底板要比窗口底色略深一点，才看得出"这是一块板"；再掺一点 Surface 保持主题感
-        var bg     = Opaque(t.Background);
-        var darker = new System.Numerics.Vector4(bg.X * 0.94f, bg.Y * 0.94f, bg.Z * 0.92f, 1f);
-        return System.Numerics.Vector4.Lerp(darker, Opaque(t.Surface), 0.2f);
+        // v2.6.0 的颜色（已确认观感正确）：背景与表面各取一半
+        return System.Numerics.Vector4.Lerp(Opaque(t.Background), Opaque(t.Surface), 0.5f);
     }
 
     private void DrawRow(TitleEntry e,

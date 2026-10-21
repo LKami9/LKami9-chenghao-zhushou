@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "背景板改为略深底板并铺满：设置页覆盖整个模块区域（无滚动条），独立窗口的称号列表整块铺底。",
-      "Version": "2.7.0",
+      "Description": "还原 v2.6.0 的底板颜色（确认观感正确），保留 v2.7 的铺满覆盖：设置页全区域 + 独立窗口称号列表整块。",
+      "Version": "2.7.1",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "79037DD373DB0EBD4F925350972983C756EF012F31159BBA800687D7471411EB"
+      "Sha256": "75BB0BE196A31675514DEC69CF02950DA321D8AB580584B92FCF728E7D5E8AE8"
     }
   ]
 }
