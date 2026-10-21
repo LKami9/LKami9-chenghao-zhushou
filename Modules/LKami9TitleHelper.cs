@@ -110,6 +110,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         DalamudServices.PluginInterface.UiBuilder.Draw += this.DrawWindow;
         DalamudServices.Framework.Update                += this.OnFrameworkUpdate;
 
+        this.MigrateConfig();
+
         if (this.config.ScanOnOpen || !this.built) this.Build();
     }
 
@@ -165,6 +167,16 @@ public sealed class LKami9TitleHelper : ModuleBase
             default:
                 return false;
         }
+    }
+
+    /// <summary>旧配置迁移：v2.3 起默认窗口自由拖动、每页 40 条。</summary>
+    private void MigrateConfig()
+    {
+        if (this.config.ConfigVersion >= 2) return;
+
+        this.config.DockToOmni  = false;
+        if (this.config.PageSize > 60) this.config.PageSize = 40;
+        this.config.ConfigVersion = 2;
     }
 
     private void ToggleWindow(bool open)
@@ -607,6 +619,17 @@ public sealed class LKami9TitleHelper : ModuleBase
             var chrome = OmniWindowChrome.Draw(
                 framePos, frameSize, this.collapsed,
                 "LKami9 称号助手", CollapseId, CloseId, true);
+
+            if (this.config.DockToOmni)
+            {
+                // 贴靠是每帧强制位置；只要用户在标题栏按下并拖动，就自动解除贴靠
+                var titleHeight = OmniTheme.TitleBarHeight();
+                var inTitle = ImGui.IsWindowHovered()
+                           && ImGui.GetIO().MousePos.Y < framePos.Y + titleHeight;
+
+                if (inTitle && ImGui.IsMouseDragging(ImGuiMouseButton.Left, OmniTheme.Scale(3f)))
+                    this.config.DockToOmni = false;
+            }
 
             if (chrome.CloseClicked)
             {
@@ -1062,6 +1085,7 @@ public sealed class LKami9TitleHelperConfig
     public bool Ascending  { get; set; } = true;
     public bool ScanOnOpen { get; set; } = true;
     public bool DockToOmni { get; set; } = false;
+    public int  ConfigVersion { get; set; }
     public int  PageSize   { get; set; } = 40;
     public string CategoryFilter { get; set; } = string.Empty;
     public List<uint> Favorites { get; set; } = [];

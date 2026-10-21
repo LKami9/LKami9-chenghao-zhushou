@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "窗口默认自由拖动（不再每帧强制位置），两个滚动条恢复原样；字体/配色/内边距仍取 Omni 主题。",
-      "Version": "2.2.2",
+      "Description": "旧配置自动迁移（默认解除贴靠、每页 40 条）；贴靠状态下按住标题栏拖动即自动解锁。",
+      "Version": "2.3.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "04050C6678C2E9D0C2B81A431421B47EAF51F5E1D7EB35E52C26EFF510450D21"
+      "Sha256": "D54BFDF2DE0675AB779A87C93ECA0BEF3E8CEEADC6D71D605719806767EE52E0"
     }
   ]
 }
