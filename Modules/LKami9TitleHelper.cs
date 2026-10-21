@@ -436,6 +436,14 @@ public sealed class LKami9TitleHelper : ModuleBase
         ImGui.PopTextWrapPos();
     }
 
+    private static void FillCurrentWindow(System.Numerics.Vector4 color, float radius)
+    {
+        var pos  = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        ImGui.GetWindowDrawList().AddRectFilled(pos, pos + size,
+            ImGui.GetColorU32(Opaque(color)), radius);
+    }
+
     private unsafe void DrawWindow()
     {
         if (!this.config.WindowOpen) return;
@@ -524,12 +532,13 @@ public sealed class LKami9TitleHelper : ModuleBase
                 var (contentPos, contentSize) = OmniWindowChrome.GetContentBounds(framePos, frameSize);
                 if (contentSize.X > 1f && contentSize.Y > 1f)
                 {
-                    var panel = System.Numerics.Vector4.Lerp(tokens.Background, tokens.Surface, 0.55f) with { W = 1f };
+                    var panel = Opaque(tokens.Background);
                     draw.AddRectFilled(contentPos, contentPos + contentSize,
                         ImGui.GetColorU32(panel), radius);
 
                     ImGui.SetCursorScreenPos(contentPos);
                     ImGui.BeginChild("###LKami9TitleContent", contentSize, false, ImGuiWindowFlags.None);
+                    FillCurrentWindow(panel, radius);
                     this.DrawContent();
                     ImGui.EndChild();
                 }
@@ -555,6 +564,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         // 主题可能是浅色/玻璃主题，直接用 Tokens 当文字色会看不清：
         // 统一按背景亮度把文字色往黑/白方向推，保证对比度。
         var back = Opaque(tokens.Background);
+        var panel = Opaque(tokens.Background);
         var cText = Readable(tokens.Text, back);
         var cDim = Readable(tokens.Secondary, back);
         var cAccent = Readable(tokens.Accent, back);
@@ -614,6 +624,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (listHeight < OmniTheme.Scale(120f)) listHeight = OmniTheme.Scale(120f);
 
         ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false, ImGuiWindowFlags.None);
+        FillCurrentWindow(panel, OmniTheme.Scale(tokens.BorderRadius));
 
         var shown = 0;
         foreach (var e in this.view)
