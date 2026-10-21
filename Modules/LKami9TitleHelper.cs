@@ -1240,23 +1240,10 @@ public sealed class LKami9TitleHelper : ModuleBase
             changed = true;
         }
 
-        ImGui.Spacing();
-        var dock = this.config.DockToOmni;
-        if (ImGui.Checkbox("窗口贴靠 Omni 主窗口", ref dock)) { this.config.DockToOmni = dock; changed = true; }
-
         var autoExpand = this.config.AutoExpandLocked;
         if (ImGui.Checkbox("默认展开未解锁称号", ref autoExpand))
         {
             this.config.AutoExpandLocked = autoExpand;
-            changed = true;
-        }
-
-        var pageSize = this.config.PageSize;
-        ImGui.SetNextItemWidth(OmniTheme.Scale(160f));
-        if (ImGui.InputInt("每页条数", ref pageSize, 20, 100))
-        {
-            this.config.PageSize = Math.Clamp(pageSize, 20, 500);
-            this.page = 1;
             changed = true;
         }
 
