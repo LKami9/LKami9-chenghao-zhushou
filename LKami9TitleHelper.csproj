@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <AssemblyName>LKami9TitleHelper</AssemblyName>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+  <ItemGroup><Compile Include="Modules\LKami9TitleHelper.cs" /></ItemGroup>
+  <ItemGroup>
+    <Reference Include="Dalamud"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\Dalamud.dll</HintPath></Reference>
+    <Reference Include="Dalamud.Bindings.ImGui"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\Dalamud.Bindings.ImGui.dll</HintPath></Reference>
+    <Reference Include="FFXIVClientStructs"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\FFXIVClientStructs.dll</HintPath></Reference>
+    <Reference Include="InteropGenerator.Runtime"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\InteropGenerator.Runtime.dll</HintPath></Reference>
+    <Reference Include="Lumina"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\Lumina.dll</HintPath></Reference>
+    <Reference Include="Lumina.Excel"><HintPath>D:\XIVLauncherCN\XIVLauncherCN\addon\Hooks\dev\Lumina.Excel.dll</HintPath></Reference>
+    <Reference Include="OmniToolbox.Common"><HintPath>D:\zhuomian\Omni Toolbox\OmniToolbox.Common.dll</HintPath></Reference>
+    <Reference Include="OmniToolbox"><HintPath>D:\zhuomian\Omni Toolbox\OmniToolbox.dll</HintPath></Reference>
+    <Reference Include="OmenTools"><HintPath>D:\zhuomian\Omni Toolbox\OmenTools.dll</HintPath></Reference>
+  </ItemGroup>
+</Project>
