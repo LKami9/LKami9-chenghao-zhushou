@@ -1,0 +1,15 @@
+{
+  "SchemaVersion": 1,
+  "Modules": [
+    {
+      "InternalName": "LKami9TitleHelper",
+      "Name": "LKami9称号助手",
+      "Author": "LKami9",
+      "Description": "检索全部称号（称号名/成就名/分类/ID），区分已解锁与未解锁；已解锁一键佩戴，未解锁显示获取方式（关联成就、成就描述、分类与点数）。",
+      "Version": "1.0.0",
+      "MinimumOmniVersion": "1.1.7.0",
+      "File": "Modules/LKami9TitleHelper.cs",
+      "Sha256": "D0D1919AE11C7EBE2AEE59AE9081908DEF4108EFE39E44417605AC753D364075"
+    }
+  ]
+}
