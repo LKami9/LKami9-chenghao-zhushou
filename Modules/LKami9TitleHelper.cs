@@ -558,17 +558,24 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         var omni = FindOmniMainWindow();
-        var pos = this.config.DockToOmni
-            ? this.ComputeDockedPosition(omni, targetSize)
-            : OmniTheme.ClampWindowPosition(
-                this.lastPos == System.Numerics.Vector2.Zero
-                    ? viewport.WorkPos + viewport.WorkSize - targetSize
-                    : this.lastPos,
-                targetSize);
 
-        OmniWindowChrome.SetNextWindowPosition(WindowId, pos);
-        ImGui.SetNextWindowPos(pos, this.config.DockToOmni ? ImGuiCond.Always : ImGuiCond.FirstUseEver);
-        this.lastPos = pos;
+        if (this.config.DockToOmni)
+        {
+            // 贴靠模式：每帧跟随 Omni 主窗口
+            var dockPos = this.ComputeDockedPosition(omni, targetSize);
+            OmniWindowChrome.SetNextWindowPosition(WindowId, dockPos);
+            ImGui.SetNextWindowPos(dockPos, ImGuiCond.Always);
+        }
+        else
+        {
+            // 自由模式：位置交给 ImGui / Omni 的记忆，不每帧强制，才能拖动
+            OmniWindowChrome.SetNextWindowPosition(WindowId);
+            ImGui.SetNextWindowPos(
+                OmniTheme.ClampWindowPosition(
+                    viewport.WorkPos + viewport.WorkSize - targetSize,
+                    targetSize),
+                ImGuiCond.FirstUseEver);
+        }
 
         var self = ImGuiWindowPtr.Null;
 
@@ -590,6 +597,7 @@ public sealed class LKami9TitleHelper : ModuleBase
 
             var framePos  = ImGui.GetWindowPos();
             var frameSize = ImGui.GetWindowSize();
+            this.lastPos  = framePos;
             var tokens    = OmniTheme.Tokens;
             var radius    = OmniTheme.Scale(tokens.BorderRadius);
             var draw = ImGui.GetWindowDrawList();
@@ -647,11 +655,8 @@ public sealed class LKami9TitleHelper : ModuleBase
             fontScope?.Dispose();
         }
 
-        if (!self.IsNull)
-        {
-            if (!omni.IsNull) ImGuiP.BringWindowToDisplayBehind(self, omni);
-            else              ImGuiP.BringWindowToDisplayBack(self);
-        }
+        if (!self.IsNull && this.config.DockToOmni && !omni.IsNull)
+            ImGuiP.BringWindowToDisplayBehind(self, omni);
 
         if (!open) this.config.WindowOpen = false;
     }
@@ -838,7 +843,8 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (this.page > pageCount) this.page = pageCount;
         if (this.page < 1) this.page = 1;
 
-        ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false, ImGuiWindowFlags.None);
+        ImGui.BeginChild("###LKami9TitleList", new System.Numerics.Vector2(0f, listHeight), false,
+            ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
         FillCurrentWindow(panel, OmniTheme.Scale(tokens.BorderRadius));
 
         var from = (this.page - 1) * pageSize;
@@ -881,7 +887,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var btnWidth = OmniTheme.Scale(54f);
         var rowWidth = MathF.Max(OmniTheme.Scale(120f),
             ImGui.GetContentRegionAvail().X - btnWidth - OmniTheme.Scale(8f));
-        var label = string.Format("{0}  {1}    ({2} · {3})", ok ? "●" : "○", e.Name, kind, e.Id);
+        var label = string.Format("{0}  {1}    ({2} · {3})", ok ? "[已解锁]" : "[未解锁]", e.Name, kind, e.Id);
         if (OmniControls.RoundedSelectable(label, this.expanded.Contains(e.Id),
                 ImGuiSelectableFlags.None, new System.Numerics.Vector2(rowWidth, OmniTheme.Scale(24f))))
         {
@@ -1053,8 +1059,8 @@ public sealed class LKami9TitleHelperConfig
     public bool WindowOpen { get; set; }
     public bool Ascending  { get; set; } = true;
     public bool ScanOnOpen { get; set; } = true;
-    public bool DockToOmni { get; set; } = true;
-    public int  PageSize   { get; set; } = 100;
+    public bool DockToOmni { get; set; } = false;
+    public int  PageSize   { get; set; } = 40;
     public string CategoryFilter { get; set; } = string.Empty;
     public List<uint> Favorites { get; set; } = [];
 }
