@@ -81,7 +81,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     private readonly List<TitleEntry> view = [];
     private readonly Dictionary<uint, bool> unlocked = [];
 
-    private Dalamud.Interface.ManagedFontAtlas.IFontHandle? omniFont;
+    private Dalamud.Interface.ManagedFontAtlas.IFontHandle omniFont;
     private int page = 1;
     private int jumpPage = 1;
     private readonly List<uint> expanded = [];
@@ -96,7 +96,6 @@ public sealed class LKami9TitleHelper : ModuleBase
     private bool    lockedOnly;
     private bool    prefixOnly;
     private bool    suffixOnly;
-    private int     displayLimit = 300;
     private int     unlockedCount;
 
     private bool                 collapsed;
@@ -618,7 +617,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         PushOmniStyle(style);
 
         this.omniFont ??= OmniFonts.GetUIFont();
-        IDisposable? fontScope = this.omniFont is { Available: true } ? this.omniFont.Push() : null;
+        IDisposable fontScope = this.omniFont is { Available: true } ? this.omniFont.Push() : null;
 
         try
         {
@@ -800,12 +799,8 @@ public sealed class LKami9TitleHelper : ModuleBase
     {
         var tokens  = OmniTheme.Tokens;
         var pad     = MathF.Max(OmniTheme.Scale(8f), OmniTheme.WindowInset());
-        var back    = Opaque(tokens.Background);
-        var panel   = Opaque(tokens.Background);
+        var panel   = PanelColor(tokens);
         var cText   = Opaque(tokens.Text);
-        var cDim    = Opaque(tokens.Secondary);
-        var cAccent = Opaque(tokens.Accent);
-        var cOk     = Opaque(tokens.Success);
 
         ImGui.Dummy(new System.Numerics.Vector2(0f, OmniTheme.ContentGap()));
         ImGui.Indent(pad);
@@ -880,12 +875,12 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         // 摘要
         ImGui.Spacing();
-        ImGui.TextColored(cAccent,
+        ImGui.TextColored(cText,
             string.Format("共 {0} 个称号 · 已解锁 {1} · 当前 {2} 条", this.all.Count, this.unlockedCount, this.view.Count));
         if (this.lastEquipped.Length > 0)
         {
             ImGui.SameLine();
-            ImGui.TextColored(cOk, "· 上次佩戴：" + this.lastEquipped);
+            ImGui.TextColored(cText, "· 上次佩戴：" + this.lastEquipped);
         }
 
         DrawThemedRule(tokens.Border);
@@ -906,7 +901,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             // 否则每行会自带一层亮色背景，看起来就是"中间白、两边深"
             listScope.Color(ImGuiCol.Header, panel);
             listScope.Color(ImGuiCol.HeaderHovered, OmniTheme.HoverBackground);
-            listScope.Color(ImGuiCol.HeaderActive, OmniTheme.ActiveBackground);
+            listScope.Color(ImGuiCol.HeaderActive, panel);
             listScope.Var(ImGuiStyleVar.ChildRounding, OmniTheme.Scale(tokens.BorderRadius));
             listScope.Var(ImGuiStyleVar.ChildBorderSize, OmniTheme.BorderThickness());
 
@@ -916,7 +911,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         var from = (this.page - 1) * pageSize;
         var to   = Math.Min(this.view.Count, from + pageSize);
         for (var i = from; i < to; i++)
-            this.DrawRow(this.view[i], cDim, cOk);
+            this.DrawRow(this.view[i], cText);
 
             ImGui.EndChild();
         }
@@ -928,20 +923,18 @@ public sealed class LKami9TitleHelper : ModuleBase
         this.page     = pageLocal;
         this.jumpPage = jumpLocal;
 
-        ImGui.TextColored(cDim, this.status);
+        ImGui.TextColored(cText, this.status);
         ImGui.Unindent(pad);
     }
 
-    /// <summary>面板色：比主题背景略深一档，用来做背景板，避免整片同色发亮。</summary>
+    /// <summary>面板色：沿用 Omni 主内容区正在使用的深色底板，列表不再退回浅色 Background。</summary>
     private static System.Numerics.Vector4 PanelColor(OmniToolbox.UI.Theme.ThemeTokens t)
     {
-        // v2.6.0 的颜色（已确认观感正确）：背景与表面各取一半
         return System.Numerics.Vector4.Lerp(Opaque(t.Background), Opaque(t.Surface), 0.5f);
     }
 
     private void DrawRow(TitleEntry e,
-                         System.Numerics.Vector4 cDim,
-                         System.Numerics.Vector4 cOk)
+                         System.Numerics.Vector4 cText)
     {
         var ok      = this.IsUnlocked(e.Id);
         var kind    = e.IsPrefix ? "前缀" : "后缀";
@@ -1012,20 +1005,20 @@ public sealed class LKami9TitleHelper : ModuleBase
                 if (e.AchName.Length > 0) line += "【" + e.AchName + "】";
                 if (e.AchCat.Length  > 0) line += "   " + e.AchCat;
                 if (e.AchPoints      > 0) line += string.Format("   {0} 点", e.AchPoints);
-                ImGui.TextColored(cDim, line);
+                ImGui.TextColored(cText, line);
 
-                if (e.AchDesc.Length > 0) WrappedTextColored(cDim, e.AchDesc);
+                if (e.AchDesc.Length > 0) WrappedTextColored(cText, e.AchDesc);
             }
             else
             {
-                ImGui.TextColored(cDim, "（数据表里没有关联成就，可能是特殊来源）");
+                ImGui.TextColored(cText, "（数据表里没有关联成就，可能是特殊来源）");
             }
 
             if (!ok && e.AchId is > 0 and <= ushort.MaxValue)
             {
                 if (this.TryGetProgress(e.AchId, out var cur, out var max))
                 {
-                    ImGui.TextColored(cDim, string.Format("进度 {0} / {1}", cur, max));
+                    ImGui.TextColored(cText, string.Format("进度 {0} / {1}", cur, max));
                     ImGui.SameLine();
                     var frac = max > 0 ? Math.Clamp((float)cur / max, 0f, 1f) : 0f;
                     ImGui.ProgressBar(frac,
@@ -1036,7 +1029,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                     this.RequestProgress(e.AchId);
                 }
 
-                if (IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cOk, "· 已监视"); }
+                if (IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cText, "· 已监视"); }
             }
 
             ImGui.Unindent(OmniTheme.Scale(26f));
@@ -1055,9 +1048,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     {
         var tokens  = OmniTheme.Tokens;
         var panel   = PanelColor(tokens);
-        var cAccent = Opaque(tokens.Accent);
         var cText   = Opaque(tokens.Text);
-        var cDim    = Opaque(tokens.Secondary);
 
         // 背景板：否则内容直接铺在 Dalamud 的浅色底上，整片发亮刺眼。
         // 走 OmniStyleScope（自计数 + using），即使中途异常也必定弹回。
@@ -1091,7 +1082,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             false,
             ImGuiWindowFlags.NoScrollbar | ImGuiWindowFlags.NoScrollWithMouse);
 
-        ImGui.TextColored(cAccent, "LKami9 称号助手");
+        ImGui.TextColored(cText, "LKami9 称号助手");
         WrappedTextColored(cText,
             "主界面在独立窗口中，配色与窗口样式跟随 Omni 本体主题。");
 
@@ -1124,7 +1115,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         }
 
         ImGui.Spacing();
-        ImGui.TextColored(cDim, this.status);
+        ImGui.TextColored(cText, this.status);
 
         ImGui.EndChild();
 

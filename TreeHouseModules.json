@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "设置页底板扩展到宿主命令区，整页统一落在同一块背景板上；称号列表继续使用整块底板色。",
-      "Version": "2.9.0",
+      "Description": "全部文字统一使用 Omni 正文色；称号列表的每一行、选中行和列表空白区域统一铺同一块深色底板。",
+      "Version": "2.10.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "2B27D4ACE34743F095BDF0FBC7B2B71F6E6E4028DD8C0C9A8B389986EB4C1CA8"
+      "Sha256": "43CE6BA62E24A4280CE6222528A135DA02C2BFB3EEE6B82A3A6A9388C121690C"
     }
   ]
 }
