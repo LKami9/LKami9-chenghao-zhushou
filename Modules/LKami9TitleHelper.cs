@@ -693,7 +693,7 @@ public sealed class LKami9TitleHelper : ModuleBase
     private static void PopOmniWindowStyle()
     {
         ImGui.PopStyleVar(8);
-        ImGui.PopStyleColor(30);
+        ImGui.PopStyleColor(32);
     }
 
     #endregion
