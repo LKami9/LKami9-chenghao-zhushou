@@ -50,6 +50,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             new("重新扫描称号",   "/omni LKami9TitleHelper refresh"),
             new("按关键词搜索",   "/omni LKami9TitleHelper search 关键字"),
             new("按 ID 佩戴称号", "/omni LKami9TitleHelper equip 123"),
+            new("随机佩戴已解锁称号", "/omni LKami9TitleHelper random"),
         ],
     };
 
@@ -157,6 +158,11 @@ public sealed class LKami9TitleHelper : ModuleBase
                 this.Rebuild();
                 this.ToggleWindow(true);
                 this.status = $"搜索「{arg}」，命中 {this.view.Count} 条。";
+                return true;
+
+            case "random":
+                this.EquipRandom();
+                this.ToggleWindow(true);
                 return true;
 
             case "equip":
@@ -361,6 +367,23 @@ public sealed class LKami9TitleHelper : ModuleBase
 
         module->AddToWatchlist(id);
         return true;
+    }
+
+    private uint lastRandomId;
+
+    private void EquipRandom()
+    {
+        var pool = this.all.Where(x => this.IsUnlocked(x.Id) && x.Id != this.lastRandomId).ToList();
+        if (pool.Count == 0)
+        {
+            this.status = "没有可用的已解锁称号。";
+            return;
+        }
+
+        var pick = pool[Random.Shared.Next(pool.Count)];
+        this.lastRandomId = pick.Id;
+        this.Equip(pick.Id);
+        this.status = string.Format("随机称号：{0}（{1}）", pick.Name, pick.Id);
     }
 
     private unsafe void Equip(uint id)
@@ -832,6 +855,11 @@ public sealed class LKami9TitleHelper : ModuleBase
             this.Rebuild();
         }
         ImGui.EndDisabled();
+
+        ImGui.SameLine();
+        if (OmniControls.SmallButton("随机称号", false,
+                new System.Numerics.Vector2(OmniTheme.Scale(92f), OmniTheme.Scale(24f))))
+            this.EquipRandom();
 
         // 过滤
         ImGui.Spacing();

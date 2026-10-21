@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "去掉外层内容容器的滚动条（右侧那条长的），保留列表自身的滚动条；窗口可自由拖动、贴靠为可选项。",
-      "Version": "2.3.1",
+      "Description": "新增「随机称号」按钮（随机佩戴已解锁称号，避开上次抽到的）与 /omni LKami9TitleHelper random 命令；窗口自由拖动、仅保留列表滚动条。",
+      "Version": "2.4.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "2386079FCD0F36297D2786F3B0065855D8E42CE8F6526F0EDFBDEF119BA3819E"
+      "Sha256": "26D295E1C915F4455D09B8AE07EF625C1266994DBA70D73DDC9143DCF86E680A"
     }
   ]
 }
