@@ -6,6 +6,7 @@ using Dalamud.Bindings.ImGui;
 using Dalamud.Plugin.Services;
 
 using FFXIVClientStructs.FFXIV.Client.Game.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
 using Lumina.Excel.Sheets;
 
@@ -71,6 +72,7 @@ public sealed class LKami9TitleHelper : ModuleBase
         public string AchDesc = string.Empty;
         public string AchCat  = string.Empty;
         public byte   AchPoints;
+        public uint   AchId;
     }
 
     private readonly List<TitleEntry> all  = [];
@@ -179,7 +181,7 @@ public sealed class LKami9TitleHelper : ModuleBase
             var titles       = DalamudServices.DataManager.GetExcelSheet<Title>();
             if (achievements == null || titles == null) { this.status = "取不到称号 / 成就数据表。"; return; }
 
-            var byTitle = new Dictionary<uint, (string Name, string Desc, string Cat, byte Points)>();
+            var byTitle = new Dictionary<uint, (string Name, string Desc, string Cat, byte Points, uint AchId)>();
             foreach (var ach in achievements)
             {
                 try
@@ -189,7 +191,7 @@ public sealed class LKami9TitleHelper : ModuleBase
 
                     var cat = string.Empty;
                     try { cat = ach.AchievementCategory.ValueNullable?.Name.ToString() ?? string.Empty; } catch { }
-                    byTitle[tid] = (ach.Name.ToString(), Condense(ach.Description.ToString()), cat, ach.Points);
+                    byTitle[tid] = (ach.Name.ToString(), Condense(ach.Description.ToString()), cat, ach.Points, ach.RowId);
                 }
                 catch { }
             }
@@ -222,6 +224,7 @@ public sealed class LKami9TitleHelper : ModuleBase
                         e.AchDesc   = a.Desc;
                         e.AchCat    = a.Cat;
                         e.AchPoints = a.Points;
+                        e.AchId     = a.AchId;
                     }
 
                     this.all.Add(e);
@@ -271,6 +274,67 @@ public sealed class LKami9TitleHelper : ModuleBase
         if (string.IsNullOrWhiteSpace(s)) return string.Empty;
         s = s.Replace("\r", " ").Replace("\n", " ").Trim();
         return s.Length > 200 ? s[..200] + "…" : s;
+    }
+
+    private readonly Dictionary<uint, (uint Cur, uint Max)> progress = [];
+    private double nextProgressRequest;
+
+    private unsafe bool TryGetProgress(uint achId, out uint cur, out uint max)
+    {
+        cur = 0;
+        max = 0;
+
+        if (this.progress.TryGetValue(achId, out var cached) && cached.Max > 0)
+        {
+            cur = cached.Cur;
+            max = cached.Max;
+            return true;
+        }
+
+        var ach = FFXIVClientStructs.FFXIV.Client.Game.UI.Achievement.Instance();
+        if (ach != null && ach->ProgressAchievementId == achId && ach->ProgressMax > 0)
+        {
+            this.progress[achId] = (ach->ProgressCurrent, ach->ProgressMax);
+            cur = ach->ProgressCurrent;
+            max = ach->ProgressMax;
+            return true;
+        }
+
+        return false;
+    }
+
+    private unsafe void RequestProgress(uint achId)
+    {
+        var now = ImGui.GetTime();
+        if (now < this.nextProgressRequest) return;
+        this.nextProgressRequest = now + 0.25;
+
+        var ach = FFXIVClientStructs.FFXIV.Client.Game.UI.Achievement.Instance();
+        if (ach == null) return;
+
+        ach->RequestAchievementProgress(achId);
+    }
+
+    private static unsafe bool IsWatched(uint achId)
+    {
+        if (achId == 0 || achId > ushort.MaxValue) return false;
+        var module = AchievementListModule.Instance();
+        return module != null && module->IsOnWatchlist((ushort)achId);
+    }
+
+    private static unsafe bool ToggleWatch(uint achId)
+    {
+        if (achId == 0 || achId > ushort.MaxValue) return false;
+
+        var module = AchievementListModule.Instance();
+        if (module == null) return false;
+
+        var id = (ushort)achId;
+        if (module->IsOnWatchlist(id)) { module->RemoveFromWatchlist(id); return false; }
+        if (module->IsWatchlistFull()) return false;
+
+        module->AddToWatchlist(id);
+        return true;
     }
 
     private unsafe void Equip(uint id)
@@ -650,6 +714,19 @@ public sealed class LKami9TitleHelper : ModuleBase
                 if (OmniControls.SmallButton("佩戴", false)) this.Equip(e.Id);
             }
 
+            if (ImGui.BeginPopupContextItem("###ctx"))
+            {
+                if (ok && OmniControls.RoundedMenuItem("佩戴")) this.Equip(e.Id);
+                if (e.AchId is > 0 and <= ushort.MaxValue)
+                {
+                    var watched = IsWatched(e.AchId);
+                    if (OmniControls.RoundedMenuItem(watched ? "移出成就监视" : "加入成就监视"))
+                        ToggleWatch(e.AchId);
+                }
+                if (OmniControls.RoundedMenuItem("复制称号名")) ImGui.SetClipboardText(e.Name);
+                ImGui.EndPopup();
+            }
+
             if (e.AchName.Length > 0 || e.AchDesc.Length > 0)
             {
                 ImGui.Indent(OmniTheme.Scale(14f));
@@ -669,6 +746,26 @@ public sealed class LKami9TitleHelper : ModuleBase
             {
                 ImGui.Indent(OmniTheme.Scale(14f));
                 ImGui.TextColored(cDim, "（数据表里没有关联成就，可能是特殊来源）");
+                ImGui.Unindent(OmniTheme.Scale(14f));
+            }
+
+            if (!ok && e.AchId is > 0 and <= ushort.MaxValue)
+            {
+                ImGui.Indent(OmniTheme.Scale(14f));
+                if (this.TryGetProgress(e.AchId, out var cur, out var max))
+                {
+                    ImGui.TextColored(cDim, $"进度 {cur} / {max}");
+                    ImGui.SameLine();
+                    var frac = max > 0 ? Math.Clamp((float)cur / max, 0f, 1f) : 0f;
+                    ImGui.ProgressBar(frac,
+                        new System.Numerics.Vector2(OmniTheme.Scale(140f), OmniTheme.Scale(8f)), string.Empty);
+                    if (IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cOk, "· 已监视"); }
+                }
+                else
+                {
+                    if (OmniControls.SmallButton("查询进度", false)) this.RequestProgress(e.AchId);
+                    if (IsWatched(e.AchId)) { ImGui.SameLine(); ImGui.TextColored(cOk, "· 已监视"); }
+                }
                 ImGui.Unindent(OmniTheme.Scale(14f));
             }
 

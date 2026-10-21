@@ -5,11 +5,11 @@
       "InternalName": "LKami9TitleHelper",
       "Name": "LKami9称号助手",
       "Author": "LKami9",
-      "Description": "独立窗口版：检索全部称号（称号名/成就名/分类/ID），区分已解锁与未解锁；已解锁一键佩戴，未解锁显示获取方式（关联成就、描述、分类与点数）。界面与配色跟随 Omni 本体主题。",
-      "Version": "1.1.7",
+      "Description": "Omni 组件版：称号检索/一键佩戴/未解锁获取方式，新增成就进度查询与「加入成就监视」；独立窗口贴靠 Omni 主体、层级排在其后；全程不碰全局样式栈。",
+      "Version": "1.2.0",
       "MinimumOmniVersion": "1.1.7.0",
       "File": "Modules/LKami9TitleHelper.cs",
-      "Sha256": "C9AC5923EA5AE6D56A9FE2109600D17A7679A6EDD47CE00849C14C2E842D9F62"
+      "Sha256": "8B29031B57757C32F1DC8193C6647F2CA4995A8703813260C80D0A4510DE09E8"
     }
   ]
 }
